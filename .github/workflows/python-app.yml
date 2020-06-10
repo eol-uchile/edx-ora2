@@ -22,4 +22,4 @@ jobs:
         pip install -r requirements/travis.txt
     - name: Test with tox
       run: |
-        tox py35-django22
+        tox -e py35-django22
