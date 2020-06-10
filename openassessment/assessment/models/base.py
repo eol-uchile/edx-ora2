@@ -543,6 +543,9 @@ class Assessment(models.Model):
             3
 
         """
+        # EOL: Overwritting ora2 median to average
+        return Assessment.get_average_score(scores)
+        # EOL
         total_criterion_scores = len(scores)
         sorted_scores = sorted(scores)
         median = int(math.ceil(total_criterion_scores / float(2)))
@@ -557,6 +560,14 @@ class Assessment(models.Model):
                 )
             )
         return median_score
+
+    @staticmethod
+    def get_average_score(scores):
+        """Calculate the average of the scores"""
+        total_criterion_scores = len(scores)
+        if total_criterion_scores == 0:
+            return 0
+        return round(sum(scores) / total_criterion_scores)
 
     @classmethod
     def scores_by_criterion(cls, assessments):

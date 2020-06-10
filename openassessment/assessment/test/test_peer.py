@@ -1309,10 +1309,10 @@ class TestPeerApi(CacheResetTest):
         self.assertEqual(5, Assessment.get_median_score([5]))
         # average of 5, 6, rounded down.
         self.assertEqual(6, Assessment.get_median_score([5, 6]))
-        self.assertEqual(14, Assessment.get_median_score([5, 6, 12, 16, 22, 53]))
-        self.assertEqual(14, Assessment.get_median_score([6, 5, 12, 53, 16, 22]))
-        self.assertEqual(16, Assessment.get_median_score([5, 6, 12, 16, 22, 53, 102]))
-        self.assertEqual(16, Assessment.get_median_score([16, 6, 12, 102, 22, 53, 5]))
+        self.assertEqual(19, Assessment.get_median_score([5, 6, 12, 16, 22, 53]))
+        self.assertEqual(19, Assessment.get_median_score([6, 5, 12, 53, 16, 22]))
+        self.assertEqual(31, Assessment.get_median_score([5, 6, 12, 16, 22, 53, 102]))
+        self.assertEqual(31, Assessment.get_median_score([16, 6, 12, 102, 22, 53, 5]))
 
     def test_assess_before_submitting(self):
         with raises(peer_api.PeerAssessmentWorkflowError):
