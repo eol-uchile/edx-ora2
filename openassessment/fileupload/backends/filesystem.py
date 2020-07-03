@@ -42,6 +42,7 @@ class Backend(BaseBackend):
 
     def get_download_url(self, key):
         from openassessment.fileupload.views_filesystem import get_file_path
+        import os
         url_key_name = self._get_key_name(key)
         if not os.path.exists(get_file_path(url_key_name)):
             raise exceptions.FileUploadInternalError("File not found in filesystem")
