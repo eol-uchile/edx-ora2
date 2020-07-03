@@ -433,7 +433,7 @@ class TestFileUploadServiceWithDjangoStorageBackend(TestCase):
         """
         # Download URL is None until the file is uploaded
         self.key = key
-        with raises(Exception) as execinfo:
+        with raises(exceptions.FileUploadInternalError) as execinfo:
             download_url = self.backend.get_download_url(self.key)
 
         # Upload file
