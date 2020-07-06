@@ -44,7 +44,7 @@ def download_file(key):
     with open(metadata_path) as f:
         metadata = json.load(f)
         content_type = metadata.get("Content-Type", 'application/octet-stream')
-    with open(file_path, 'r') as f:
+    with open(file_path, 'rb') as f:
         response = HttpResponse(f.read(), content_type=content_type)
 
     file_name = os.path.basename(os.path.dirname(file_path))
@@ -112,8 +112,8 @@ def safe_save(path, content):
         raise exceptions.FileUploadInternalError(u"File upload root directory does not exist: %s" % root_directory)
     if not os.path.exists(dir_path):
         os.makedirs(dir_path)
-    with open(path, 'w') as f:
-        f.write(content.decode('utf-8') if six.PY3 and isinstance(content, bytes) else content)
+    with open(path, 'wb') as f:
+        f.write(content if six.PY3 and isinstance(content, bytes) else content.encode())
 
 
 def safe_remove(path):

@@ -493,7 +493,7 @@ class SubmissionMixin:
             if key:
                 url = file_upload_api.get_download_url(key)
         except FileUploadError as exc:
-            logger.exception(u"FileUploadError: Download url for file key {key} failed with error {error}".format(
+            logger.info(u"FileUploadError: Download url for file key {key} failed with error {error}".format(
                 key=key,
                 error=exc
             ))
