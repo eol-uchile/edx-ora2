@@ -244,10 +244,10 @@ class TestFileUploadServiceWithFilesystemBackend(TestCase):
 
     def test_upload_download(self):
         upload_url = self.backend.get_upload_url(self.key, self.content_type)
-        download_url = self.backend.get_download_url(self.key)
         file_path = views.get_file_path(self.key_name)
 
         upload_response = self.client.put(upload_url, data=self.content.read(), content_type=self.content_type)
+        download_url = self.backend.get_download_url(self.key)
         download_response = self.client.get(download_url)
         self.content.seek(0)
 
@@ -433,8 +433,7 @@ class TestFileUploadServiceWithDjangoStorageBackend(TestCase):
         """
         # Download URL is None until the file is uploaded
         self.key = key
-        with raises(exceptions.FileUploadInternalError) as execinfo:
-            download_url = self.backend.get_download_url(self.key)
+        download_url = self.backend.get_download_url(self.key)
 
         # Upload file
         self.client.login(username=self.username, password=self.password)
