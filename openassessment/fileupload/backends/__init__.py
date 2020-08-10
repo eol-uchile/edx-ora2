@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 from django.conf import settings
 
-from . import django_storage, filesystem, s3, swift
+from . import django_storage, filesystem, s3, swift, s3boto3
 
 
 def get_backend():
@@ -17,5 +17,7 @@ def get_backend():
         return swift.Backend()
     elif backend_setting == "django":
         return django_storage.Backend()
+    elif backend_setting == "s3boto3":
+        return s3boto3.Backend()
     else:
         raise ValueError(u"Invalid ORA2_FILEUPLOAD_BACKEND setting value: %s" % backend_setting)
