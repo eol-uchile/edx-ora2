@@ -27,7 +27,7 @@ class Backend(BaseBackend):
                 "put_object",
                 Params={
                     "Bucket": bucket_name,
-                    "Key": key_name,
+                    "Key": get_key_path(key_name),
                     "ContentType": content_type,
                 },
                 ExpiresIn=self.UPLOAD_URL_TIMEOUT,
@@ -42,11 +42,11 @@ class Backend(BaseBackend):
         bucket_name, key_name = self._retrieve_parameters(key)
         try:
             conn = _connect_to_s3()
-            if not object_exists(conn, bucket_name, key_name):
+            if not object_exists(conn, bucket_name, get_key_path(key_name)):
                 return ""
             return conn.generate_presigned_url(
                 "get_object",
-                Params={"Bucket": bucket_name, "Key": key_name},
+                Params={"Bucket": bucket_name, "Key": get_key_path(key_name)},
                 ExpiresIn=self.DOWNLOAD_URL_TIMEOUT,
             )
         except Exception as ex:
@@ -59,7 +59,7 @@ class Backend(BaseBackend):
         bucket_name, key_name = self._retrieve_parameters(key)
         conn = _connect_to_s3()
         if object_exists(conn, bucket_name, key_name):
-            conn.delete_object(Bucket=bucket_name, Key=key_name)
+            conn.delete_object(Bucket=bucket_name, Key=get_key_path(key_name))
             return True
         return False
 
@@ -89,9 +89,15 @@ def object_exists(conn, bucket_name, key_name):
     Check if a key exists in the given S3 bucket.
     """
     try:
-        conn.head_object(Bucket=bucket_name, Key=key_name)
+        conn.head_object(Bucket=bucket_name, Key=get_key_path(key_name))
     except botocore.exceptions.ClientError as e:
         if e.response["Error"]["Code"] == "404":
             return False
         raise e
     return True
+
+def get_key_path(key):
+    """
+    Returns the path to the content file.
+    """
+    return key + '/content'
