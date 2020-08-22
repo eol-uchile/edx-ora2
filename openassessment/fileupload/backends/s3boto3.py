@@ -42,7 +42,7 @@ class Backend(BaseBackend):
         bucket_name, key_name = self._retrieve_parameters(key)
         try:
             conn = _connect_to_s3()
-            if not object_exists(conn, bucket_name, get_key_path(key_name)):
+            if not object_exists(conn, bucket_name, key_name):
                 return ""
             return conn.generate_presigned_url(
                 "get_object",
