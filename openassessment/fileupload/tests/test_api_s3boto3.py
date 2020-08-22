@@ -38,11 +38,11 @@ class TestFileUploadService(TestCase):
         conn.create_bucket(Bucket="mybucket")
         conn.put_object(
             Bucket="mybucket",
-            Key="submissions_attachments/foo",
+            Key="submissions_attachments/foo/content",
             Body=b"How d'ya do?"
         )
         downloadUrl = api.get_download_url("foo")
-        self.assertIn("/submissions_attachments/foo", downloadUrl)
+        self.assertIn("/submissions_attachments/foo/content", downloadUrl)
 
     @mock_s3
     @override_settings(
@@ -55,7 +55,7 @@ class TestFileUploadService(TestCase):
         conn.create_bucket(Bucket="mybucket")
         conn.put_object(
             Bucket="mybucket",
-            Key="submissions_attachments/foo",
+            Key="submissions_attachments/foo/content",
             Body=b"Test"
         )
         result = api.remove_file("foo")
