@@ -15,6 +15,7 @@ django-simple-history
 bleach
 html5lib
 boto
+boto3
 python-swiftclient
 defusedxml
 django-model-utils
