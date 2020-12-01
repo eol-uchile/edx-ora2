@@ -298,10 +298,42 @@
             var $staffArea = $('.openassessment__staff-area', this.element);
             var $manageLearnersTab = $('.openassessment__staff-tools', $staffArea);
             var $staffGradeTool = $('.openassessment__staff-grading', $staffArea);
+            var downloadCsvUrl = this.server.url('download_csv');
 
             if ($staffArea.length <= 0) {
                 return;
             }
+
+            $staffArea.find('#download-students-status-csv').click(
+                // Handle download csv click.
+                function() {
+                    $.ajax({
+                        type: "GET",
+                        url: downloadCsvUrl,
+                        contentType: "application/json; charset=utf-8"
+                    }).success(function(data) {
+                        // data example:
+                        //  [
+                        //      {"username": "user01", "status": "peer"},
+                        //      {"username": "user02", "status": "waiting"},
+                        //      {"username": "user03", "status": "done"},
+                        //      {"username": "user04", "status": "empty"},
+                        //  ]
+                        var csv = gettext('Username') + "," + gettext('Problem Step') + "\n";
+                        data.forEach(function(obj) {
+                                csv += obj["username"] + "," + obj["status"] + "\n";
+                        });
+                        var hiddenElement = document.createElement('a');
+                        hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+                        hiddenElement.target = '_blank';
+                        hiddenElement.download = 'openassessment.csv';
+                        hiddenElement.click();
+                    }).fail(function(e) {
+                        alert(gettext("Unexpected server error."));
+                        console.log(e);
+                    });
+                }
+            );
 
             // Install a click handler for the staff button panel
             $staffArea.find('.ui-staff__button').click(

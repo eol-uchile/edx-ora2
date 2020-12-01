@@ -488,3 +488,8 @@ msgstr "Tipo de archivo no puede ser vacío."
 #: openassessment/xblock/static/js/src/studio/oa_edit_settings.js:109
 msgid "The following file types are not allowed: "
 msgstr "Los siguientes tipos de archivos son soportados:"
+
+#: openassessment/xblock/static/js/openassessment-lms.min.js:1
+#: openassessment/xblock/static/js/src/lms/oa_staff_area.js:323
+msgid "Problem Step"
+msgstr "Etapa del problema"
