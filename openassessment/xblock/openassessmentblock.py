@@ -36,6 +36,7 @@ from openassessment.xblock.self_assessment_mixin import SelfAssessmentMixin
 from openassessment.xblock.staff_area_mixin import StaffAreaMixin
 from openassessment.xblock.staff_assessment_mixin import StaffAssessmentMixin
 from openassessment.xblock.student_training_mixin import StudentTrainingMixin
+from openassessment.xblock.eol_staff_mixin import EolStaffMixin
 from openassessment.xblock.studio_mixin import StudioMixin
 from openassessment.xblock.submission_mixin import SubmissionMixin
 from openassessment.xblock.team_mixin import TeamMixin
@@ -103,6 +104,7 @@ class OpenAssessmentBlock(MessageMixin,
                           PeerAssessmentMixin,
                           SelfAssessmentMixin,
                           StaffAssessmentMixin,
+                          EolStaffMixin,
                           StudioMixin,
                           GradeMixin,
                           LeaderboardMixin,
