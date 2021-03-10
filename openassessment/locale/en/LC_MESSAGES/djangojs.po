@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: edx-ora2\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2020-12-01 22:15-0500\n"
+"POT-Creation-Date: 2021-03-10 15:38-0500\n"
 "PO-Revision-Date: 2014-06-04 15:41-0400\n"
 "Last-Translator: Muhammad Ayub khan <ayubkhan@edx.org>\n"
 "Language-Team: openedx-translation <openedx-translation@googlegroups.com>\n"
@@ -323,6 +323,7 @@ msgstr ""
 #: openassessment/xblock/static/js/openassessment-lms.js:317
 #: openassessment/xblock/static/js/src/lms/oa_staff_area.js:130
 #: openassessment/xblock/static/js/src/lms/oa_staff_area.js:234
+#: openassessment/xblock/static/js/src/lms/oa_staff_area.js:330
 msgid "Unexpected server error."
 msgstr ""
 
@@ -344,6 +345,17 @@ msgid "Error getting the number of ungraded responses"
 msgstr ""
 
 #: openassessment/xblock/static/js/openassessment-lms.js:317
+#: openassessment/xblock/static/js/src/lms/oa_staff_area.js:320
+msgid "Username"
+msgstr ""
+
+#: openassessment/xblock/static/js/openassessment-lms.js:317
+#: openassessment/xblock/static/js/src/lms/oa_staff_area.js:320
+msgid "Problem Step"
+msgstr ""
+
+#: openassessment/xblock/static/js/openassessment-lms.js:317
+#: openassessment/xblock/static/js/src/lms/oa_staff_area.js:550
 msgid ""
 "If you leave this page without submitting your staff assessment, you will "
 "lose any work you have done."
