@@ -1578,6 +1578,15 @@ msgstr "Fecha de liberación"
 msgid "N/A"
 msgstr "N/D"
 
+#: openassessment/templates/openassessmentblock/staff_area/oa_staff_area.html:17
+#: openassessment/templates/openassessmentblock/staff_area/oa_staff_area.html:158
+msgid "Students Status Report"
+msgstr "Estado de los Estudiantes"
+
+#: openassessment/templates/openassessmentblock/staff_area/oa_staff_area.html:163
+msgid "Download CSV Report"
+msgstr "Descargar Reporte CSV"
+
 #: openassessment/templates/openassessmentblock/staff_area/oa_staff_grade_learners.html:7
 msgid "Staff Assessment"
 msgstr "Evaluación del equipo del curso"
