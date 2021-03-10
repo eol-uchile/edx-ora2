@@ -479,3 +479,8 @@ msgid ""
 "This problem has already been released. Any changes will apply only to "
 "future assessments."
 msgstr "Este problema ya ha sido liberado. Cualquier cambio en el mismo se aplicará solo a los envío futuros."
+
+#: openassessment/xblock/static/js/openassessment-lms.js:317
+#: openassessment/xblock/static/js/src/lms/oa_staff_area.js:320
+msgid "Problem Step"
+msgstr "Etapa del problema"
