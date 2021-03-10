@@ -14,6 +14,7 @@
         {% if staff_assessment_required %}
             <button class="ui-staff__button button-staff-grading" aria-expanded="false" data-panel="openassessment__staff-grading">{% trans "Grade Available Responses" %}</button>
         {% endif %}
+        <button class="ui-staff__button button-staff-status" aria-expanded="false" data-panel="openassessment__staff-status">{% trans "Students Status Report" %}</button>
     </div>
 
     <div class="openassessment__staff-tools wrapper--staff-tools wrapper--ui-staff">
@@ -150,4 +151,19 @@
         </div>
     </div>
     {% endif %}
+    <div class="openassessment__staff-status wrapper--staff-grading wrapper--ui-staff">
+        <div class="staff-grading ui-staff">
+            <button class="ui-staff_close_button ui-staff__title"><span class="sr">{% trans "Close" %}</span> <span class="icon fa fa-close" aria-hidden="true"></span></button>
+            <h2 class="staff-status__title ui-staff__title">
+                <span class="staff-info__title__copy">{% trans "Students Status Report" %}</span>
+            </h2>
+
+            <div class="staff-info__content ui-staff__content">
+                <div class="staff-students_status ui-staff__content__section">
+                    <button id="download-students-status-csv" class="btn btn-primary"><span class="copy">{% trans "Download CSV Report" %}</span></button>
+                </div>
+            </div>
+
+        </div>
+    </div>
 </div>
