@@ -296,10 +296,42 @@ export class StaffAreaView {
       const $staffArea = $('.openassessment__staff-area', this.element);
       const $manageLearnersTab = $('.openassessment__staff-tools', $staffArea);
       const $staffGradeTool = $('.openassessment__staff-grading', $staffArea);
+      const downloadCsvUrl = this.server.url('download_csv');
 
       if ($staffArea.length <= 0) {
         return;
       }
+
+      $staffArea.find('#download-students-status-csv').click(
+          // Handle download csv click.
+          () => {
+              $.ajax({
+                  type: "GET",
+                  url: downloadCsvUrl,
+                  contentType: "application/json; charset=utf-8"
+              }).success((data) => {
+                  // data example:
+                  //  [
+                  //      {"username": "user01", "status": "peer"},
+                  //      {"username": "user02", "status": "waiting"},
+                  //      {"username": "user03", "status": "done"},
+                  //      {"username": "user04", "status": "empty"},
+                  //  ]
+                  var csv = gettext('Username') + "," + gettext('Problem Step') + "\n";
+                  data.forEach((obj) => {
+                          csv += obj["username"] + "," + obj["status"] + "\n";
+                  });
+                  var hiddenElement = document.createElement('a');
+                  hiddenElement.href = 'data:text/csv;charset=utf-8,' + encodeURI(csv);
+                  hiddenElement.target = '_blank';
+                  hiddenElement.download = 'openassessment.csv';
+                  hiddenElement.click();
+              }).fail((e) => {
+                  alert(gettext("Unexpected server error."));
+                  console.log(e);
+              });
+          }
+      );
 
       // Install a click handler for the staff button panel
       $staffArea.find('.ui-staff__button').click(
