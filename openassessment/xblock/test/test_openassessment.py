@@ -554,6 +554,32 @@ class TestOpenAssessment(XBlockHandlerTestCase):
 class TestDates(XBlockHandlerTestCase):
     """ Test Assessment Dates. """
 
+    @patch('openassessment.xblock.openassessmentblock.OpenAssessmentBlock.get_original_date')
+    @scenario('data/dates_scenario.xml')
+    def test_submission_dates_extended_due(self, xblock, original_due):
+        original_due.return_value = dt.datetime(2014, 3, 5).replace(tzinfo=pytz.utc)
+        xblock.start = dt.datetime(2014, 3, 1).replace(tzinfo=pytz.utc)
+        xblock.due = dt.datetime(2020, 3, 1).replace(tzinfo=pytz.utc)
+
+        self.assert_is_closed(
+            xblock,
+            dt.datetime(2014, 3, 31, 23, 59, 59).replace(tzinfo=pytz.utc),
+            "submission", False, None, 
+            xblock.start, 
+            dt.datetime(2020, 3, 1).replace(tzinfo=pytz.utc),
+            released=True
+        )
+        original_due.return_value = None
+
+        self.assert_is_closed(
+            xblock,
+            dt.datetime(2014, 3, 31, 23, 59, 59).replace(tzinfo=pytz.utc),
+            "submission", False, None, 
+            xblock.start, 
+            dt.datetime(2014, 4, 1).replace(tzinfo=pytz.utc),
+            released=True
+        )
+
     @scenario('data/basic_scenario.xml')
     def test_start_end_date_checks(self, xblock):
         xblock.start = dt.datetime(2014, 3, 1).replace(tzinfo=pytz.utc)

@@ -1000,14 +1000,23 @@ class OpenAssessmentBlock(MessageMixin,
         start, due, date_ranges = resolve_dates(
             self.start, self.due, [submission_range] + assessment_ranges, self._
         )
-
+        original_date = self.get_original_date(self.scope_ids.usage_id)
+        is_extended = False
+        if original_date and original_date != due:
+            is_extended = True
         open_range = (start, due)
         assessment_steps = self.assessment_steps
         if step == 'submission':
             open_range = date_ranges[0]
+            if is_extended: 
+                aux_due = max(due, open_range[1])
+                open_range = (open_range[0], aux_due)
         elif step in assessment_steps:
             step_index = assessment_steps.index(step)
             open_range = date_ranges[1 + step_index]
+            #if is_extended:
+            #    aux_due = max(due, open_range[1])
+            #    open_range = (open_range[0], aux_due)
 
         # Course staff always have access to the problem
         if course_staff is None:
@@ -1027,6 +1036,26 @@ class OpenAssessmentBlock(MessageMixin,
         elif now >= open_range[1]:
             return True, "due", open_range[0], open_range[1]
         return False, None, open_range[0], open_range[1]
+
+    def get_original_date(self, block_key):
+        """
+        block_key.block_type must be xblock not [chapter, sequential, vertical, course]
+        because get_date_for_block() need sequential usage key
+        """
+        try:
+            from edx_when.api import get_date_for_block
+            from xmodule.modulestore.django import modulestore
+        except ImportError:
+            logger.error("ORA2 - Import error from edx_when.api import get_date_for_block or from xmodule.modulestore.django import modulestore")
+            return None
+        if block_key.block_type in ['chapter', 'sequential', 'vertical', 'course']:
+            return None
+        store = modulestore()
+        block_item = store.get_item(block_key) #xblock item
+        block_item = store.get_item(block_item.parent) #vertical item
+        sequential_id = block_item.parent #sequential id
+        due_date = get_date_for_block(sequential_id.course_key, sequential_id)
+        return due_date
 
     def get_waiting_details(self, status_details):
         """
