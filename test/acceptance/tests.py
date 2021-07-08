@@ -889,11 +889,11 @@ class FullWorkflowMixin:
             self.verify_grade_entries(
                 [
                     (
-                        u"STAFF GRADE - 0 POINTS", u"Poor", u"PEER MEDIAN GRADE", u"Poor", u"PEER 1", u"- POOR",
+                        u"STAFF GRADE - 0 POINTS", u"Poor", u"Peer Average Grade", u"Poor", u"PEER 1", u"- POOR",
                         u"YOUR SELF ASSESSMENT", u"Good"
                     ),
                     (
-                        u"STAFF GRADE - 1 POINT", u"Fair", u"PEER MEDIAN GRADE", u"Poor", u"PEER 1", u"- POOR",
+                        u"STAFF GRADE - 1 POINT", u"Fair", u"Peer Average Grade", u"Poor", u"PEER 1", u"- POOR",
                         u"YOUR SELF ASSESSMENT", u"Excellent"
                     )
                 ]
@@ -902,11 +902,11 @@ class FullWorkflowMixin:
             self.verify_grade_entries(
                 [
                     (
-                        u"STAFF GRADE - 0 POINTS", u"Poor", u'PEER MEDIAN GRADE',
+                        u"STAFF GRADE - 0 POINTS", u"Poor", u'Peer Average Grade',
                         u'Waiting for peer reviews', u"YOUR SELF ASSESSMENT", u"Good"
                     ),
                     (
-                        u"STAFF GRADE - 1 POINT", u"Fair", u'PEER MEDIAN GRADE',
+                        u"STAFF GRADE - 1 POINT", u"Fair", u'Peer Average Grade',
                         u'Waiting for peer reviews', u"YOUR SELF ASSESSMENT", u"Excellent"
                     )
                 ]
@@ -1028,7 +1028,7 @@ class FullWorkflowOverrideTest(OpenAssessmentTest, FullWorkflowMixin):
         )
         self.staff_area_page.verify_learner_final_score(self.PEER_ASSESSMENT_SCORE_STRING)
         self.assertEqual(
-            ['CRITERION', 'PEER MEDIAN GRADE', 'SELF ASSESSMENT GRADE'],
+            ['CRITERION', 'Peer Average Grade', 'SELF ASSESSMENT GRADE'],
             self.staff_area_page.learner_final_score_table_headers
         )
         self.assertEqual(
@@ -1038,8 +1038,8 @@ class FullWorkflowOverrideTest(OpenAssessmentTest, FullWorkflowMixin):
         )
 
         self.verify_grade_entries(
-            [(u"PEER MEDIAN GRADE - 0 POINTS", u"Poor", u"PEER 1", u"- POOR", u"YOUR SELF ASSESSMENT", u"Good"),
-             (u"PEER MEDIAN GRADE - 0 POINTS", u"Poor", u"PEER 1", u"- POOR", u"YOUR SELF ASSESSMENT", u"Excellent")]
+            [(u"Peer Average Grade - 0 POINTS", u"Poor", u"PEER 1", u"- POOR", u"YOUR SELF ASSESSMENT", u"Good"),
+             (u"Peer Average Grade - 0 POINTS", u"Poor", u"PEER 1", u"- POOR", u"YOUR SELF ASSESSMENT", u"Excellent")]
         )
 
         # Now do a staff override, changing the score (to 1).
@@ -1053,7 +1053,7 @@ class FullWorkflowOverrideTest(OpenAssessmentTest, FullWorkflowMixin):
         )
         self.staff_area_page.verify_learner_final_score(self.STAFF_AREA_SCORE.format(self.STAFF_OVERRIDE_SCORE))
         self.assertEqual(
-            ['CRITERION', 'STAFF GRADE', 'PEER MEDIAN GRADE', 'SELF ASSESSMENT GRADE'],
+            ['CRITERION', 'STAFF GRADE', 'Peer Average Grade', 'SELF ASSESSMENT GRADE'],
             self.staff_area_page.learner_final_score_table_headers
         )
         self.assertEqual(
@@ -1067,11 +1067,11 @@ class FullWorkflowOverrideTest(OpenAssessmentTest, FullWorkflowMixin):
         self.verify_grade_entries(
             [
                 (
-                    u"STAFF GRADE - 0 POINTS", u"Poor", u"PEER MEDIAN GRADE", u"Poor",
+                    u"STAFF GRADE - 0 POINTS", u"Poor", u"Peer Average Grade", u"Poor",
                     u"PEER 1", u"- POOR", u"YOUR SELF ASSESSMENT", u"Good"
                 ),
                 (
-                    u"STAFF GRADE - 1 POINT", u"Fair", u"PEER MEDIAN GRADE",
+                    u"STAFF GRADE - 1 POINT", u"Fair", u"Peer Average Grade",
                     u"Poor", u"PEER 1", u"- POOR", u"YOUR SELF ASSESSMENT", u"Excellent"
                 )
             ]
@@ -1110,7 +1110,7 @@ class FullWorkflowOverrideTest(OpenAssessmentTest, FullWorkflowMixin):
         self.verify_staff_area_fields(learner, [], [], [])
         self.staff_area_page.verify_learner_final_score(self.STAFF_AREA_SCORE.format(self.STAFF_OVERRIDE_SCORE))
         self.assertEqual(
-            ['CRITERION', 'STAFF GRADE', 'PEER MEDIAN GRADE'],
+            ['CRITERION', 'STAFF GRADE', 'Peer Average Grade'],
             self.staff_area_page.learner_final_score_table_headers
         )
         self.assertEqual(
@@ -1120,8 +1120,8 @@ class FullWorkflowOverrideTest(OpenAssessmentTest, FullWorkflowMixin):
         )
         self.verify_grade_entries(
             [
-                (u"STAFF GRADE - 0 POINTS", u"Poor", u'PEER MEDIAN GRADE', u'Waiting for peer reviews'),
-                (u"STAFF GRADE - 1 POINT", u"Fair", u'PEER MEDIAN GRADE', u'Waiting for peer reviews')
+                (u"STAFF GRADE - 0 POINTS", u"Poor", u'Peer Average Grade', u'Waiting for peer reviews'),
+                (u"STAFF GRADE - 1 POINT", u"Fair", u'Peer Average Grade', u'Waiting for peer reviews')
             ]
         )
 
