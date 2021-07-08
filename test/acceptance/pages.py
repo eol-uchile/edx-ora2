@@ -910,7 +910,7 @@ class StaffAreaPage(OpenAssessmentPage, AssessmentMixin):
         Return the final score table headers (as an array of strings) as shown in the staff area section.
 
         Returns: array of strings representing the headers (for example,
-            ['CRITERION', 'STAFF GRADE', 'PEER MEDIAN GRADE', 'SELF ASSESSMENT GRADE'])
+            ['CRITERION', 'STAFF GRADE', 'Peer Average Grade', 'SELF ASSESSMENT GRADE'])
         """
         return self._get_table_text(".staff-info__final__grade__table th")
 
