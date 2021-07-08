@@ -1220,21 +1220,21 @@ msgstr ""
 
 #: openassessment/templates/openassessmentblock/response/oa_response.html:153
 msgid "Team Response "
-msgstr ""
+msgstr "Respuesta del equipo "
 
 #: openassessment/templates/openassessmentblock/response/oa_response.html:155
 msgid "Your Response "
-msgstr ""
+msgstr "Su respuesta "
 
 #: openassessment/templates/openassessmentblock/response/oa_response.html:159
 #: openassessment/templates/openassessmentblock/response/oa_response.html:228
 msgid "(Required)"
-msgstr ""
+msgstr "(Requerido)"
 
 #: openassessment/templates/openassessmentblock/response/oa_response.html:161
 #: openassessment/templates/openassessmentblock/response/oa_response.html:230
 msgid "(Optional)"
-msgstr ""
+msgstr "(Opcional)"
 
 #: openassessment/templates/openassessmentblock/response/oa_response.html:165
 msgid ""
