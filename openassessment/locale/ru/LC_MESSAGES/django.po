@@ -2018,7 +2018,7 @@ msgid "Staff Comments"
 msgstr "Комментарии команды курса"
 
 #: openassessment/xblock/grade_mixin.py:366
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "Средняя оценка сокурсниками"
 
 #: openassessment/xblock/grade_mixin.py:371
