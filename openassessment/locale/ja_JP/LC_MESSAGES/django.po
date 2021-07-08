@@ -2004,7 +2004,7 @@ msgid "Staff Comments"
 msgstr "スタッフのコメント"
 
 #: openassessment/xblock/grade_mixin.py:366
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "他の受講者の成績中央値"
 
 #: openassessment/xblock/grade_mixin.py:371

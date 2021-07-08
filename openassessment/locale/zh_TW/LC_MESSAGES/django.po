@@ -2015,7 +2015,7 @@ msgid "Staff Comments"
 msgstr ""
 
 #: openassessment/xblock/grade_mixin.py:366
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "同儕平均分數"
 
 #: openassessment/xblock/grade_mixin.py:371

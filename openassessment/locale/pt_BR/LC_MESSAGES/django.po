@@ -2020,7 +2020,7 @@ msgid "Staff Comments"
 msgstr "Comentários da Equipe"
 
 #: openassessment/xblock/grade_mixin.py:366
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "Nota Média do Colega"
 
 #: openassessment/xblock/grade_mixin.py:371

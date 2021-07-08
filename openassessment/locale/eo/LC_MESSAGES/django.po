@@ -2628,7 +2628,7 @@ msgid "Staff Comments"
 msgstr "Stäff Çömménts Ⱡ'σяєм ιρѕυм ∂σłσя ѕιт#"
 
 #: openassessment/xblock/grade_mixin.py
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "Péér Médïän Grädé Ⱡ'σяєм ιρѕυм ∂σłσя ѕιт αмє#"
 
 #: openassessment/xblock/grade_mixin.py openassessment/xblock/grade_mixin.py
