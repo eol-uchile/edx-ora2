@@ -2062,17 +2062,17 @@ msgstr "Par"
 
 #: openassessment/xblock/grade_mixin.py:649
 msgid "The grade for this problem is determined by your Staff Grade."
-msgstr ""
+msgstr "La calificación de este problema está determinada por el equipo del curso."
 
 #: openassessment/xblock/grade_mixin.py:651
 msgid ""
-"The grade for this problem is determined by the median score of your Peer "
-"Assessments."
-msgstr ""
+"The grade for this problem is determined by the median score of "
+"your Peer Assessments."
+msgstr "La calificación de este problema está determinada por la puntuación media de sus evaluaciones de pares."
 
 #: openassessment/xblock/grade_mixin.py:654
 msgid "The grade for this problem is determined by your Self Assessment."
-msgstr ""
+msgstr "La calificación de este problema está determinada por su autoevaluación."
 
 #: openassessment/xblock/grade_mixin.py:660
 #, python-brace-format
