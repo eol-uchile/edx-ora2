@@ -291,7 +291,7 @@ class TestGrade(XBlockHandlerTestCase, SubmitAssessmentsMixin):
                 next(
                     assessment['option']
                     for assessment in criterion['assessments']
-                    if assessment['title'] == u'Peer Median Grade'
+                    if assessment['title'] == u'Peer Average Grade'
                 )
                 for criterion in grade_details['criteria']
             ], feedback_num

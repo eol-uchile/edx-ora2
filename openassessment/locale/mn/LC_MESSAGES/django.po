@@ -1644,7 +1644,7 @@ msgid "Staff Comments"
 msgstr ""
 
 #: openassessment/xblock/grade_mixin.py:356
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr ""
 
 #: openassessment/xblock/grade_mixin.py:361

@@ -2012,7 +2012,7 @@ msgid "Staff Comments"
 msgstr "Komentarze kadry"
 
 #: openassessment/xblock/grade_mixin.py:366
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "Mediana ocen wzajemnych"
 
 #: openassessment/xblock/grade_mixin.py:371

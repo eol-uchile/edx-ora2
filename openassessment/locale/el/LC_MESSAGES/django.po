@@ -2010,7 +2010,7 @@ msgid "Staff Comments"
 msgstr ""
 
 #: openassessment/xblock/grade_mixin.py:366
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "ΔΙΑΜΕΣΟΣ ΤΩΝ ΒΑΘΜΩΝ ΠΟΥ ΛΑΒΑΤΕ ΑΠΟ ΤΟΥΣ ΣΥΜΦΟΙΤΗΤΕΣ ΣΑΣ"
 
 #: openassessment/xblock/grade_mixin.py:371
