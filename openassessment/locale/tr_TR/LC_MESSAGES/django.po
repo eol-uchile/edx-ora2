@@ -2009,7 +2009,7 @@ msgid "Staff Comments"
 msgstr "Ekip Yorumları"
 
 #: openassessment/xblock/grade_mixin.py:366
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "Akran Ortalama Notu"
 
 #: openassessment/xblock/grade_mixin.py:371

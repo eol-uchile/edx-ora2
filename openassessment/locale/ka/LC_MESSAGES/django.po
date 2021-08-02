@@ -2000,7 +2000,7 @@ msgid "Staff Comments"
 msgstr "თანამშრომელთა კომენტარები"
 
 #: openassessment/xblock/grade_mixin.py:366
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "თანაკურსელთა საშუალო დონე"
 
 #: openassessment/xblock/grade_mixin.py:371

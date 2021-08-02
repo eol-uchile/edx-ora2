@@ -2020,7 +2020,7 @@ msgid "Staff Comments"
 msgstr "تعليق طاقم المساق"
 
 #: openassessment/xblock/grade_mixin.py:366
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "متوسّط درجة الزملاء"
 
 #: openassessment/xblock/grade_mixin.py:371

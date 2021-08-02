@@ -363,7 +363,7 @@ class GradeMixin:
         )
         if "peer-assessment" in assessment_steps:
             peer_assessment_part = {
-                'title': _('Peer Median Grade'),
+                'title': _('Peer Average Grade'),
                 'criterion': criterion,
                 'option': self._peer_median_option(submission_uuid, criterion),
                 'individual_assessments': [

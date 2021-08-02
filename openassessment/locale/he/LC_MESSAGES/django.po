@@ -2011,7 +2011,7 @@ msgid "Staff Comments"
 msgstr "תגובות הצוות"
 
 #: openassessment/xblock/grade_mixin.py:366
-msgid "Peer Median Grade"
+msgid "Peer Average Grade"
 msgstr "דירוג חציוני של עמית"
 
 #: openassessment/xblock/grade_mixin.py:371
