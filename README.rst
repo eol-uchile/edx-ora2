@@ -6,6 +6,16 @@ This repository defines an Open Response Assessment (ORA) XBlock for use within 
 `User docs <http://edx.readthedocs.org/projects/edx-partner-course-staff/en/latest/exercises_tools/open_response_assessments/index.html>`_
 
 
+EOL ChangeLog
+=============
+
+- Updated spanish translations
+- Added date extensions
+- Fixed testing
+- Added CI
+- Added s3boto3 file storage
+- Removed redundant  messages
+
 Installation, Tests, and other Developer Tasks
 ==============================================
 
