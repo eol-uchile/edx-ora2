@@ -510,7 +510,6 @@ class OpenAssessmentBlock(MessageMixin,
         # On page load, update the workflow status.
         # We need to do this here because peers may have graded us, in which
         # case we may have a score available.
-
         try:
             self.update_workflow_status()
         except AssessmentWorkflowError:

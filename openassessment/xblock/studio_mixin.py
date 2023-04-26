@@ -87,6 +87,7 @@ class StudioMixin:
 
         js_context_dict = {
             "ALLOWED_IMAGE_EXTENSIONS": self.ALLOWED_IMAGE_EXTENSIONS,
+            "ALLOWED_AUDIO_EXTENSIONS": self.ALLOWED_AUDIO_EXTENSIONS,
             "ALLOWED_FILE_EXTENSIONS": self.ALLOWED_FILE_EXTENSIONS,
             "FILE_EXT_BLACK_LIST": self.FILE_EXT_BLACK_LIST,
         }

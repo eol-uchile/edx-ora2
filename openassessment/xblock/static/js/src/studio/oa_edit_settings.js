@@ -133,6 +133,9 @@ export class EditSettingsView {
       } else if (selectedValue === 'pdf-and-image') {
         el.val(this.data.ALLOWED_FILE_EXTENSIONS.join(', '));
       }
+      else if (selectedValue === 'audio') {
+        el.val(this.data.ALLOWED_AUDIO_EXTENSIONS.join(', '));
+      }
 
       el.prop('disabled', true);
       this.setHidden(extNote, false);

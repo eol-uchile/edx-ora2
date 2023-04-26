@@ -1,6 +1,7 @@
 import Server from '../oa_server';
 import CourseItemsListingView from './oa_course_items_listing';
 import FileUploader from './oa_file_upload';
+import AudioRecord from './oa_audio_record';
 import ResponseView from './oa_response';
 import SelfView from './oa_self';
 import StaffView from './oa_staff';
@@ -40,8 +41,8 @@ export class BaseView {
       this.element = element;
       this.server = server;
       this.fileUploader = new FileUploader();
-
-      this.responseView = new ResponseView(this.element, this.server, this.fileUploader, this, data);
+      this.audioRecord = new AudioRecord();
+      this.responseView = new ResponseView(this.element, this.server, this.fileUploader, this.audioRecord, this, data);
       this.trainingView = new StudentTrainingView(this.element, this.server, this);
       this.selfView = new SelfView(this.element, this.server, this);
       this.peerView = new PeerView(this.element, this.server, this);

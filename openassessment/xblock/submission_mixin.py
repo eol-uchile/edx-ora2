@@ -47,8 +47,11 @@ class SubmissionMixin:
     ALLOWED_IMAGE_MIME_TYPES = ['image/gif', 'image/jpeg', 'image/pjpeg', 'image/png']  # pragma: no cover
     ALLOWED_IMAGE_EXTENSIONS = ['gif', 'jpg', 'jpgeg', 'jfif', 'pjpeg', 'pjp', 'png']  # pragma: no cover
 
-    ALLOWED_FILE_MIME_TYPES = ['application/pdf'] + ALLOWED_IMAGE_MIME_TYPES  # pragma: no cover
-    ALLOWED_FILE_EXTENSIONS = ['pdf'] + ALLOWED_IMAGE_EXTENSIONS  # pragma: no cover
+    ALLOWED_AUDIO_MIME_TYPES = ['audio/ogg', 'application/ogg']
+    ALLOWED_AUDIO_EXTENSIONS = ['ogg', 'ogx']
+
+    ALLOWED_FILE_MIME_TYPES = ['application/pdf'] + ALLOWED_IMAGE_MIME_TYPES + ALLOWED_AUDIO_MIME_TYPES  # pragma: no cover
+    ALLOWED_FILE_EXTENSIONS = ['pdf'] + ALLOWED_IMAGE_EXTENSIONS + ALLOWED_AUDIO_EXTENSIONS  # pragma: no cover
 
     MAX_FILES_COUNT = 20  # pragma: no cover
 
@@ -75,6 +78,10 @@ class SubmissionMixin:
             'mime_types': ALLOWED_FILE_MIME_TYPES,
             'extensions': ALLOWED_FILE_EXTENSIONS,
         },
+        'audio': {
+            'mime_types': ALLOWED_AUDIO_MIME_TYPES,
+            'extensions': ALLOWED_AUDIO_EXTENSIONS
+            },
         'custom': {}
     }
 
@@ -803,6 +810,8 @@ class SubmissionMixin:
             return self.ALLOWED_IMAGE_EXTENSIONS
         elif self.file_upload_type == 'pdf-and-image':
             return self.ALLOWED_FILE_EXTENSIONS
+        elif self.file_upload_type == 'audio':
+            return self.ALLOWED_AUDIO_EXTENSIONS
         return None
 
     def submission_path_and_context(self):

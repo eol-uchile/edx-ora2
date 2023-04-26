@@ -29,10 +29,11 @@ export class ResponseView {
 
     UNSAVED_WARNING_KEY = 'learner-response';
 
-    constructor(element, server, fileUploader, baseView, data) {
+    constructor(element, server, fileUploader, audioRecord, baseView, data) {
       this.element = element;
       this.server = server;
       this.fileUploader = fileUploader;
+      this.audioRecord = audioRecord;
       this.baseView = baseView;
       this.savedResponse = [];
       this.textResponse = 'required';
@@ -73,6 +74,7 @@ export class ResponseView {
           view.announceStatus = false;
           view.dateFactory.apply();
           view.checkSubmissionAbility();
+          view.audioRecord.startApp();
         },
       ).fail(() => {
         view.baseView.showLoadError('response');
