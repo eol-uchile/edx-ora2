@@ -57,6 +57,7 @@ describe("OpenAssessment.EditSettingsView", function() {
         data = {
             ALLOWED_IMAGE_EXTENSIONS: ['png', 'jpg', 'gif'],
             ALLOWED_FILE_EXTENSIONS: ['pdf', 'md'],
+            ALLOWED_IMAGE_EXTENSIONS: ['ogg', 'ogx'],
             FILE_EXT_BLACK_LIST: ['exe', 'app'],
         };
 
@@ -78,6 +79,8 @@ describe("OpenAssessment.EditSettingsView", function() {
         expect(view.fileUploadType()).toBe('image');
         view.fileUploadType('pdf-and-image');
         expect(view.fileUploadType()).toBe('pdf-and-image');
+        view.fileUploadType('audio');
+        expect(view.fileUploadType()).toBe('audio');
         view.fileUploadType('custom');
         expect(view.fileUploadType()).toBe('custom');
 
@@ -136,7 +139,13 @@ describe("OpenAssessment.EditSettingsView", function() {
         view.fileUploadType("image");
         expect(view.validate()).toBe(true);
         expect(view.validationErrors().length).toBe(0);
-
+        view.fileUploadType("pdf-and-image");
+        expect(view.validate()).toBe(true);
+        expect(view.validationErrors().length).toBe(0);
+        
+        view.fileUploadType("audio");
+        expect(view.validate()).toBe(true);
+        expect(view.validationErrors().length).toBe(0);
         // expect white list field is not empty when upload type is custom
         view.fileUploadType("custom");
         view.fileTypeWhiteList('');
@@ -167,8 +176,12 @@ describe("OpenAssessment.EditSettingsView", function() {
         expect($(fileTypesSelector).prop('disabled')).toBe(true);
         expect(view.isHidden($(extensionBanner))).toBe(false);
 
-        view.fileUploadType('image-and-pdf');
+        view.fileUploadType('pdf-and-image');
         expect(view.fileTypeWhiteList()).toBe('pdf, md');
+        expect($(fileTypesSelector).prop('disabled')).toBe(true);
+        expect(view.isHidden($(extensionBanner))).toBe(false);
+        view.fileUploadType('audio');
+        expect(view.fileTypeWhiteList()).toBe('ogg, ogx');
         expect($(fileTypesSelector).prop('disabled')).toBe(true);
         expect(view.isHidden($(extensionBanner))).toBe(false);
     });
