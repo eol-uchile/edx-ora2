@@ -2,8 +2,6 @@
 Base settings for ORA2.
 """
 
-from __future__ import absolute_import
-
 import os
 
 DEBUG = True
@@ -14,6 +12,7 @@ ADMINS = (
 
 MANAGERS = ADMINS
 
+DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3', # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
@@ -81,6 +80,7 @@ TEMPLATES = [
             'context_processors': [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'django.template.context_processors.request',
             ],
             'debug': DEBUG,
         },
@@ -113,6 +113,8 @@ INSTALLED_APPS = (
     'django.contrib.admin',
     'django.contrib.admindocs',
 
+    # Waffle flag/switches
+    'waffle',
 
     # XBlock
     'workbench',
@@ -124,7 +126,7 @@ INSTALLED_APPS = (
     'openassessment.fileupload',
     'openassessment.workflow',
     'openassessment.assessment',
-
+    'openassessment.staffgrader',
 )
 
 # TODO: add config for XBLOCK_WORKBENCH { SCENARIO_CLASSES }
@@ -155,4 +157,15 @@ FEATURES = {
     # A "work-around" feature toggle meant to pull file upload data our of user state, rather than Submission records.
     # See: https://openedx.atlassian.net/browse/EDUCATOR-4951
     'ENABLE_ORA_USER_STATE_UPLOAD_DATA': False,
+
+    # Set to True to add deanonymized usernames to ORA data report
+    # See: https://openedx.atlassian.net/browse/TNL-7273
+    'ENABLE_ORA_USERNAMES_ON_DATA_EXPORT': False,
+
+    # Set to True to enable this Xblock in mobile apps.
+    'ENABLE_ORA_MOBILE_SUPPORT': False,
+
+    # Set to True to enable copying/reusing rubric data
+    # See: https://openedx.atlassian.net/browse/EDUCATOR-5751
+    'ENABLE_ORA_RUBRIC_REUSE': False
 }

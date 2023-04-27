@@ -1,7 +1,7 @@
 """
 Public interface for self-assessment.
 """
-from __future__ import absolute_import
+
 
 import logging
 
@@ -12,9 +12,7 @@ from openassessment.assessment.errors import SelfAssessmentInternalError, SelfAs
 from openassessment.assessment.models import Assessment, AssessmentPart, InvalidRubricSelection
 from openassessment.assessment.serializers import (InvalidRubric, full_assessment_dict, rubric_from_dict,
                                                    serialize_assessments)
-
-# Assessments are tagged as "self-evaluation"
-SELF_TYPE = "SE"
+from openassessment.assessment.score_type_constants import SELF_TYPE
 
 logger = logging.getLogger("openassessment.assessment.api.self")  # pylint: disable=invalid-name
 
@@ -123,7 +121,7 @@ def create_assessment(
     # Check that there are not any assessments for this submission
     if Assessment.objects.filter(submission_uuid=submission_uuid, score_type=SELF_TYPE).exists():
         msg = (
-            u"Cannot submit a self-assessment for the submission {uuid} "
+            "Cannot submit a self-assessment for the submission {uuid} "
             "because another self-assessment already exists for that submission."
         ).format(uuid=submission_uuid)
         raise SelfAssessmentRequestError(msg)
@@ -133,21 +131,21 @@ def create_assessment(
         submission = get_submission_and_student(submission_uuid)
         if submission['student_item']['student_id'] != user_id:
             msg = (
-                u"Cannot submit a self-assessment for the submission {uuid} "
-                u"because it was created by another learner "
-                u"(submission learner ID {student_id} does not match your "
-                u"learner id {other_id})"
+                "Cannot submit a self-assessment for the submission {uuid} "
+                "because it was created by another learner "
+                "(submission learner ID {student_id} does not match your "
+                "learner id {other_id})"
             ).format(
                 uuid=submission_uuid,
                 student_id=submission['student_item']['student_id'],
                 other_id=user_id
             )
             raise SelfAssessmentRequestError(msg)
-    except SubmissionNotFoundError:
+    except SubmissionNotFoundError as ex:
         msg = (
-            u"Could not submit a self-assessment because no submission exists with UUID {uuid}"
+            "Could not submit a self-assessment because no submission exists with UUID {uuid}"
         ).format(uuid=submission_uuid)
-        raise SelfAssessmentRequestError()
+        raise SelfAssessmentRequestError() from ex
 
     try:
         assessment = _complete_assessment(
@@ -163,17 +161,17 @@ def create_assessment(
     except InvalidRubric as ex:
         msg = "Invalid rubric definition: " + str(ex)
         logger.warning(msg, exc_info=True)
-        raise SelfAssessmentRequestError(msg)
+        raise SelfAssessmentRequestError(msg) from ex
     except InvalidRubricSelection as ex:
         msg = "Selected options do not match the rubric: " + str(ex)
         logger.warning(msg, exc_info=True)
-        raise SelfAssessmentRequestError(msg)
-    except DatabaseError:
+        raise SelfAssessmentRequestError(msg) from ex
+    except DatabaseError as ex:
         error_message = (
-            u"Error creating self assessment for submission {}"
+            "Error creating self assessment for submission {}"
         ).format(submission_uuid)
         logger.exception(error_message)
-        raise SelfAssessmentInternalError(error_message)
+        raise SelfAssessmentInternalError(error_message) from ex
 
     # Return the serialized assessment
     return full_assessment_dict(assessment)
@@ -254,13 +252,11 @@ def get_assessment(submission_uuid):
     ).order_by('-scored_at')[:1])
 
     if not serialized_assessments:
-        logger.info(
-            u"No self-assessment found for submission {}".format(submission_uuid)
-        )
+        logger.info("No self-assessment found for submission %s", submission_uuid)
         return None
 
     serialized_assessment = serialized_assessments[0]
-    logger.info(u"Retrieved self-assessment for submission {}".format(submission_uuid))
+    logger.info("Retrieved self-assessment for submission %s", submission_uuid)
 
     return serialized_assessment
 
@@ -292,12 +288,12 @@ def get_assessment_scores_by_criteria(submission_uuid):
         # Since this is only being sent one score, the median score will be the
         # same as the only score.
         return Assessment.get_median_score_dict(scores)
-    except DatabaseError:
+    except DatabaseError as ex:
         error_message = (
-            u"Error getting self assessment scores for submission {}"
+            "Error getting self assessment scores for submission {}"
         ).format(submission_uuid)
         logger.exception(error_message)
-        raise SelfAssessmentInternalError(error_message)
+        raise SelfAssessmentInternalError(error_message) from ex
 
 
 def _log_assessment(assessment, submission):
@@ -313,15 +309,11 @@ def _log_assessment(assessment, submission):
 
     """
     logger.info(
-        u"Created self-assessment {assessment_id} for learner {user} on "
-        u"submission {submission_uuid}, course {course_id}, item {item_id} "
-        u"with rubric {rubric_content_hash}"
-        .format(
-            assessment_id=assessment.id,
-            user=submission['student_item']['student_id'],
-            submission_uuid=submission['uuid'],
-            course_id=submission['student_item']['course_id'],
-            item_id=submission['student_item']['item_id'],
-            rubric_content_hash=assessment.rubric.content_hash
-        )
+        "Created self-assessment %s for learner %s on submission %s, course %s, item %s with rubric %s",
+        assessment.id,
+        submission['student_item']['student_id'],
+        submission['uuid'],
+        submission['student_item']['course_id'],
+        submission['student_item']['item_id'],
+        assessment.rubric.content_hash
     )

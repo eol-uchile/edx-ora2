@@ -2,10 +2,9 @@
 Handle OpenAssessment XBlock requests to the Workflow API.
 """
 
-from __future__ import absolute_import
-
 from xblock.core import XBlock
 from submissions.api import get_submissions, SubmissionInternalError, SubmissionNotFoundError
+
 from openassessment.workflow import api as workflow_api
 from openassessment.workflow.models import AssessmentWorkflowCancellation
 
@@ -71,7 +70,8 @@ class WorkflowMixin:
         if peer_assessment_module:
             requirements["peer"] = {
                 "must_grade": peer_assessment_module["must_grade"],
-                "must_be_graded_by": peer_assessment_module["must_be_graded_by"]
+                "must_be_graded_by": peer_assessment_module["must_be_graded_by"],
+                "enable_flexible_grading": peer_assessment_module.get("enable_flexible_grading", False)
             }
 
         training_module = self.get_assessment_module('student-training')
@@ -127,7 +127,11 @@ class WorkflowMixin:
             AssessmentWorkflowError
         """
         if self.is_team_assignment():
-            return self.get_team_workflow_info()
+            if submission_uuid:
+                team_submission_uuid = self.get_team_submission_uuid_from_individual_submission_uuid(submission_uuid)
+            else:
+                team_submission_uuid = None
+            return self.get_team_workflow_info(team_submission_uuid)
 
         if submission_uuid is None:
             submission_uuid = self.get_submission_uuid()

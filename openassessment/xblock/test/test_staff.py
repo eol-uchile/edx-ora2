@@ -1,19 +1,33 @@
-# -*- coding: utf-8 -*-
 """
 Tests for staff assessment handlers in Open Assessment XBlock.
 """
-from __future__ import absolute_import
+
 
 import copy
 import json
 
-import mock
-import six
+from unittest.mock import Mock, patch
 
-from openassessment.assessment.api import staff as staff_api
+from submissions import team_api as team_sub_api
+from openassessment.assessment.api import (
+    staff as staff_api,
+    teams as teams_api
+)
+from openassessment.tests.factories import UserFactory
+from openassessment.xblock.test.test_team import MockTeamsService, MOCK_TEAM_ID
+from openassessment.workflow import team_api as team_workflow_api
 
-from .base import (PEER_ASSESSMENTS, SELF_ASSESSMENT, STAFF_GOOD_ASSESSMENT, SubmitAssessmentsMixin,
-                   XBlockHandlerTestCase, scenario)
+from .base import (
+    PEER_ASSESSMENTS,
+    SELF_ASSESSMENT,
+    STAFF_GOOD_ASSESSMENT,
+    TEAM_GOOD_ASSESSMENT,
+    TEAM_GOOD_ASSESSMENT_REGRADE,
+    SubmitAssessmentsMixin,
+    XBlockHandlerTestCase,
+    scenario
+)
+from .test_staff_area import NullUserService, UserStateService, STUDENT_ITEM
 
 
 class StaffAssessmentTestBase(XBlockHandlerTestCase, SubmitAssessmentsMixin):
@@ -24,7 +38,7 @@ class StaffAssessmentTestBase(XBlockHandlerTestCase, SubmitAssessmentsMixin):
         path, context = xblock.staff_path_and_context()
 
         self.assertEqual('openassessmentblock/staff/oa_staff_grade.html', path)
-        six.assertCountEqual(self, expected_context, context)
+        self.assertCountEqual(expected_context, context)
 
         # Verify that we render without error
         resp = self.request(xblock, 'render_staff_assessment', json.dumps({}))
@@ -149,6 +163,25 @@ class TestStaffAssessmentRender(StaffAssessmentTestBase):
 class TestStaffAssessment(StaffAssessmentTestBase):
     """ Test Staff Assessment Workflow. """
 
+    @patch('openassessment.xblock.staff_assessment_mixin.staff_api.create_assessment')
+    @scenario('data/self_assessment_scenario.xml', user_id='Bob')
+    def test_staff_assess_handler_missing_id(self, xblock, mock_create_assessment):
+        student_item = xblock.get_student_item_dict()
+        self.set_staff_access(xblock)
+
+        # Create a submission for the student
+        xblock.create_submission(student_item, self.SUBMISSION)
+
+        # Try to submit an assessment without providing a good submission UUID
+        resp = self.request(xblock, 'staff_assess', json.dumps(STAFF_GOOD_ASSESSMENT), response_format='json')
+
+        # Expect that a staff-assessment was not created
+        mock_create_assessment.assert_not_called()
+        self.assertDictEqual(resp, {
+            'success': False,
+            'msg': "The submission ID of the submission being assessed was not found."
+        })
+
     @scenario('data/self_assessment_scenario.xml', user_id='Bob')
     def test_staff_assess_handler(self, xblock):
         student_item = xblock.get_student_item_dict()
@@ -166,7 +199,7 @@ class TestStaffAssessment(StaffAssessmentTestBase):
         self.assertEqual(assessment['points_possible'], 6)
         self.assertEqual(assessment['scorer_id'], 'Bob')
         self.assertEqual(assessment['score_type'], 'ST')
-        self.assertEqual(assessment['feedback'], u'Staff: good job!')
+        self.assertEqual(assessment['feedback'], 'Staff: good job!')
 
         self.assert_assessment_event_published(
             xblock, 'openassessmentblock.staff_assess', assessment, type='full-grade'
@@ -176,15 +209,15 @@ class TestStaffAssessment(StaffAssessmentTestBase):
         parts.sort(key=lambda x: x['option']['name'])
 
         self.assertEqual(len(parts), 2)
-        self.assertEqual(parts[0]['option']['criterion']['name'], u'Form')
+        self.assertEqual(parts[0]['option']['criterion']['name'], 'Form')
         self.assertEqual(parts[0]['option']['name'], 'Fair')
-        self.assertEqual(parts[1]['option']['criterion']['name'], u'𝓒𝓸𝓷𝓬𝓲𝓼𝓮')
-        self.assertEqual(parts[1]['option']['name'], u'ﻉซƈﻉɭɭﻉกՇ')
+        self.assertEqual(parts[1]['option']['criterion']['name'], '𝓒𝓸𝓷𝓬𝓲𝓼𝓮')
+        self.assertEqual(parts[1]['option']['name'], 'ﻉซƈﻉɭɭﻉกՇ')
 
         # get the assessment scores by criteria
         assessment_by_crit = staff_api.get_assessment_scores_by_criteria(submission["uuid"])
-        self.assertEqual(assessment_by_crit[u'𝓒𝓸𝓷𝓬𝓲𝓼𝓮'], 3)
-        self.assertEqual(assessment_by_crit[u'Form'], 2)
+        self.assertEqual(assessment_by_crit['𝓒𝓸𝓷𝓬𝓲𝓼𝓮'], 3)
+        self.assertEqual(assessment_by_crit['Form'], 2)
 
         score = staff_api.get_score(submission["uuid"], None)
         self.assertEqual(assessment['points_earned'], score['points_earned'])
@@ -220,13 +253,13 @@ class TestStaffAssessment(StaffAssessmentTestBase):
         submission = xblock.create_submission(student_item, self.SUBMISSION)
 
         self.set_staff_access(xblock)
-        STAFF_GOOD_ASSESSMENT['submission_uuid'] = submission['uuid']
 
         for key in STAFF_GOOD_ASSESSMENT:
             # We don't want to fail if the assess_type is not submitted to the
             # backend, since it's only used for eventing right now.
             if key != 'assess_type':
                 assessment_copy = copy.copy(STAFF_GOOD_ASSESSMENT)
+                assessment_copy['submission_uuid'] = submission['uuid']
                 del assessment_copy[key]
                 resp = self.request(xblock, 'staff_assess', json.dumps(assessment_copy), response_format='json')
                 self.assertFalse(resp['success'])
@@ -240,8 +273,10 @@ class TestStaffAssessment(StaffAssessmentTestBase):
         submission = xblock.create_submission(student_item, self.SUBMISSION)
 
         self.set_staff_access(xblock)
-        STAFF_GOOD_ASSESSMENT['submission_uuid'] = submission['uuid']
-        with mock.patch('openassessment.xblock.staff_assessment_mixin.staff_api') as mock_api:
+        assessment = copy.deepcopy(STAFF_GOOD_ASSESSMENT)
+        assessment['submission_uuid'] = submission['uuid']
+
+        with patch('openassessment.xblock.staff_assessment_mixin.staff_api') as mock_api:
             #  Simulate a error
             mock_api.create_assessment.side_effect = staff_api.StaffAssessmentRequestError
             resp = self.request(xblock, 'staff_assess', json.dumps(STAFF_GOOD_ASSESSMENT), response_format='json')
@@ -253,3 +288,191 @@ class TestStaffAssessment(StaffAssessmentTestBase):
             resp = self.request(xblock, 'staff_assess', json.dumps(STAFF_GOOD_ASSESSMENT), response_format='json')
             self.assertFalse(resp['success'])
             self.assertIn('msg', resp)
+
+
+class TestStaffTeamAssessment(StaffAssessmentTestBase):
+    """ Test Staff Team Assessment Workflow"""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.expected_answer = {
+            'points_earned': 2,
+            'parts0_criterion_name': 'Form',
+            'parts1_criterion_name': 'Concise',
+            'parts2_criterion_name': 'Clear-headed',
+            'parts0_option_name': 'Facebook',
+            'parts1_option_name': 'HP Lovecraft',
+            'parts2_option_name': 'Yogi Berra'
+        }
+        cls.regrade_expected_answer = {
+            'points_earned': 3,
+            'parts0_criterion_name': 'Concise',
+            'parts1_criterion_name': 'Form',
+            'parts2_criterion_name': 'Clear-headed',
+            'parts0_option_name': 'HP Lovecraft',
+            'parts1_option_name': 'Reddit',
+            'parts2_option_name': 'Yogi Berra'
+        }
+
+    @patch('openassessment.xblock.staff_assessment_mixin.teams_api.create_assessment')
+    @scenario('data/team_submission.xml', user_id='Bob')
+    def test_staff_assess_handler_missing_id(self, xblock, mock_create_team_assessment):
+        self.set_staff_access(xblock)
+
+        # Create a team submission
+        self._setup_xblock_and_create_team_submission(xblock)
+
+        # Try to submit an assessment without providing a good submission UUID
+        resp = self.request(xblock, 'staff_assess', json.dumps(TEAM_GOOD_ASSESSMENT), response_format='json')
+
+        # Expect that a staff assessment was not created
+        mock_create_team_assessment.assert_not_called()
+        self.assertDictEqual(resp, {
+            'success': False,
+            'msg': "The submission ID of the submission being assessed was not found."
+        })
+
+    @scenario('data/team_submission.xml', user_id='Bob')
+    def test_staff_assess_handler(self, xblock):
+
+        submission = self._setup_xblock_and_create_team_submission(xblock)
+        submission["uuid"] = str(submission["submission_uuids"][0])
+
+        self.submit_staff_assessment(xblock, submission, assessment=TEAM_GOOD_ASSESSMENT)
+
+        assessment = teams_api.get_latest_staff_assessment(submission['team_submission_uuid'])
+        self._assert_team_assessment(assessment, submission, self.expected_answer)
+
+    @scenario('data/team_submission.xml', user_id='Bob')
+    def test_staff_assess_handler_regrade(self, xblock):
+        """
+        To test regrade we first need to create/setup xblock, create an initial team submission and then
+        regrade it.
+        """
+        # create initial team submission
+        submission = self._setup_xblock_and_create_team_submission(xblock)
+        submission["uuid"] = str(submission["submission_uuids"][0])
+        # assesss initial team submission
+        self.submit_staff_assessment(xblock, submission, assessment=TEAM_GOOD_ASSESSMENT)
+        # get assessment via API for asserts
+        assessment = teams_api.get_latest_staff_assessment(submission['team_submission_uuid'])
+        self._assert_team_assessment(assessment, submission, self.expected_answer)
+        # assess the submission as a regrade by passing in a modified assessment
+        self.submit_staff_assessment(xblock, submission, assessment=TEAM_GOOD_ASSESSMENT_REGRADE)
+        # get the assessment via API for asserts
+        assessment = teams_api.get_latest_staff_assessment(submission['team_submission_uuid'])
+        self._assert_team_assessment(assessment, submission, self.regrade_expected_answer)
+
+    @scenario('data/team_submission.xml', user_id='Bob')
+    def test_assessment_error(self, xblock):
+        # Create a submission for the team
+        submission = self._setup_xblock_and_create_team_submission(xblock)
+        submission["uuid"] = str(submission["submission_uuids"][0])
+
+        with patch('openassessment.xblock.staff_assessment_mixin.teams_api') as mock_api:
+            # Simulate an error
+            mock_api.create_assessment.side_effect = teams_api.StaffAssessmentRequestError
+            resp = self.request(xblock, 'staff_assess', json.dumps(TEAM_GOOD_ASSESSMENT), response_format='json')
+            self.assertFalse(resp['success'])
+            self.assertIn('msg', resp)
+
+            #  Simulate a different error
+            mock_api.create_assessment.side_effect = teams_api.StaffAssessmentInternalError
+            resp = self.request(xblock, 'staff_assess', json.dumps(TEAM_GOOD_ASSESSMENT), response_format='json')
+            self.assertFalse(resp['success'])
+            self.assertIn('msg', resp)
+
+    def _assert_team_assessment(self, assessment, submission, expected_answer):
+        """
+        Helper function to perform asserts
+        """
+        self.assertEqual(assessment['points_earned'], expected_answer['points_earned'])
+        self.assertEqual(assessment['scorer_id'], 'Bob')
+        self.assertEqual(assessment['score_type'], 'ST')
+        self.assertEqual(assessment['feedback'], 'Staff: good job!')
+        parts = assessment['parts']
+        parts.sort(key=lambda x: x['option']['name'])
+        self.assertEqual(len(parts), 3)
+        self.assertEqual(parts[0]['option']['criterion']['name'], expected_answer['parts0_criterion_name'])
+        self.assertEqual(parts[1]['option']['criterion']['name'], expected_answer['parts1_criterion_name'])
+        self.assertEqual(parts[2]['option']['criterion']['name'], expected_answer['parts2_criterion_name'])
+        self.assertEqual(parts[0]['option']['name'], expected_answer['parts0_option_name'])
+        self.assertEqual(parts[1]['option']['name'], expected_answer['parts1_option_name'])
+        self.assertEqual(parts[2]['option']['name'], expected_answer['parts2_option_name'])
+
+        score = teams_api.get_score(submission['team_submission_uuid'], {})
+        self.assertEqual(assessment['points_earned'], score['points_earned'])
+        self.assertEqual(assessment['points_possible'], score['points_possible'])
+
+    def _setup_xblock_and_create_team_submission(self, xblock):
+        """
+        A shortcut method to setup ORA xblock and add a user submission or a team submission to the block.
+        """
+        xblock.xmodule_runtime = self._create_mock_runtime(
+            xblock.scope_ids.usage_id, True, False, 'Bob'
+        )
+        # pylint: disable=protected-access
+        xblock.runtime._services['user'] = NullUserService()
+        xblock.runtime._services['user_state'] = UserStateService()
+        xblock.runtime._services['teams'] = MockTeamsService(True)
+
+        usage_id = xblock.scope_ids.usage_id
+        xblock.location = usage_id
+        xblock.user_state_upload_data_enabled = Mock(return_value=True)
+        student_item = STUDENT_ITEM.copy()
+        student_item["item_id"] = usage_id
+
+        xblock.is_team_assignment = Mock(return_value=True)
+        anonymous_user_ids_for_team = ['Bob', 'Alice', 'Chris']
+        xblock.get_anonymous_user_ids_for_team = Mock(return_value=anonymous_user_ids_for_team)
+        arbitrary_test_user = UserFactory.create()
+        return self._create_team_submission(
+            STUDENT_ITEM['course_id'],
+            usage_id,
+            MOCK_TEAM_ID,
+            arbitrary_test_user.id,
+            anonymous_user_ids_for_team,
+            "this is an answer to a team assignment",
+        )
+
+    @staticmethod
+    def _create_mock_runtime(
+            item_id,
+            is_staff,
+            is_admin,
+            anonymous_user_id,
+            user_is_beta=False,
+            days_early_for_beta=0
+    ):
+        """
+        Internal helper to define a mock runtime.
+        """
+        mock_runtime = Mock(
+            course_id='test_course',
+            item_id=item_id,
+            anonymous_student_id='Bob',
+            user_is_staff=is_staff,
+            user_is_admin=is_admin,
+            user_is_beta=user_is_beta,
+            days_early_for_beta=days_early_for_beta,
+            service=lambda self, service: Mock(
+                get_anonymous_student_id=lambda user_id, course_id: anonymous_user_id
+            )
+        )
+        return mock_runtime
+
+    def _create_team_submission(self, course_id, item_id, team_id, submitting_user_id, team_member_student_ids, answer):
+        """
+        Create a team submission and initialize a team workflow
+        """
+        team_submission = team_sub_api.create_submission_for_team(
+            course_id,
+            item_id,
+            team_id,
+            submitting_user_id,
+            team_member_student_ids,
+            answer,
+        )
+        team_workflow_api.create_workflow(team_submission['team_submission_uuid'])
+        return team_submission

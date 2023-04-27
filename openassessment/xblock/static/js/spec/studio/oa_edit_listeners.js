@@ -1,3 +1,14 @@
+/* eslint-disable */
+import {
+  StudentTrainingListener,
+  AssessmentToggleListener,
+  StudentTrainingListenerWithTrainingExamples,
+} from 'studio/oa_edit_listeners';
+import {
+  EditStudentTrainingView,
+} from 'studio/oa_edit_assessment';
+import ValidationAlert from 'studio/oa_edit_validation_alert';
+
 /**
 Tests for the student training listener,
 which dynamically updates student training examples
@@ -6,6 +17,13 @@ based on rubric changes.
 describe("OpenAssessment.StudentTrainingListener", function() {
 
     var listener = null;
+    let defaultTrainingSection = {
+        criterion_with_two_options: {
+            "": "Not Selected",
+            option_1: "Fair - 1 points",
+            option_2: "Good - 2 points"
+        }
+    };
 
     /**
     Check that all student training examples have the expected
@@ -42,7 +60,7 @@ describe("OpenAssessment.StudentTrainingListener", function() {
 
     beforeEach(function() {
         loadFixtures('oa_edit_student_training.html');
-        listener = new OpenAssessment.StudentTrainingListener();
+        listener = new StudentTrainingListener();
     });
 
     it("updates the label and points of an option", function() {
@@ -318,7 +336,7 @@ describe("OpenAssessment.StudentTrainingListener", function() {
 
     it("does not display an alert when student training is disabled", function() {
         var studentTrainingView =
-            new OpenAssessment.EditStudentTrainingView($('#oa_student_training_editor'));
+            new EditStudentTrainingView($('#oa_student_training_editor'));
         studentTrainingView.isEnabled(false);
         // Initial state, set by the fixture
         assertExampleLabels(
@@ -342,7 +360,7 @@ describe("OpenAssessment.StudentTrainingListener", function() {
     it("does not display an alert with no training examples", function() {
         // Clear out all examples.
         var studentTrainingView =
-            new OpenAssessment.EditStudentTrainingView($('#oa_student_training_editor'));
+            new EditStudentTrainingView($('#oa_student_training_editor'));
         var items = studentTrainingView.exampleContainer.getAllItems();
         $(items).each(function(){
             studentTrainingView.exampleContainer.remove(this);
@@ -357,6 +375,20 @@ describe("OpenAssessment.StudentTrainingListener", function() {
         // The alert should not be displayed.
         expect(listener.alert.isVisible()).toBe(false);
     });
+
+    it('removes training examples when a rubric is replaced', () => {
+        // Given student training examples (default from fixture)
+        assertExampleLabels(
+            listener.examplesOptionsLabels(),
+            defaultTrainingSection
+        );
+
+        // When I replace a rubric using the "clone rubrics" feature
+        listener.rubricReplaced({});
+
+        // Then I expect all training examples to be cleared
+        assertExampleLabels(listener.examplesCriteriaLabels(), {}, 0);
+    })
 });
 
 
@@ -367,8 +399,8 @@ describe("OpenAssessment.AssessmentToggleListener", function() {
 
     beforeEach(function() {
         loadFixtures('oa_edit.html');
-        alert = new OpenAssessment.ValidationAlert().install();
-        listener = new OpenAssessment.AssessmentToggleListener();
+        alert = new ValidationAlert().install();
+        listener = new AssessmentToggleListener();
     });
 
     it("displays an alert when the user disables an assessment", function() {
@@ -424,8 +456,8 @@ describe("OpenAssessment.StudentTrainingListenerWithTrainingExamples", function(
 
     beforeEach(function() {
         loadFixtures('oa_edit_student_training.html');
-        listener = new OpenAssessment.StudentTrainingListener();
-        view = new OpenAssessment.EditStudentTrainingView('#oa_student_training_editor');
+        listener = new StudentTrainingListener();
+        view = new EditStudentTrainingView('#oa_student_training_editor');
     });
 
 

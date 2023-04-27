@@ -89,6 +89,7 @@
             "text_response": "required",
             "file_upload_response": "optional",
             "file_upload_type": "pdf-and-image",
+            "has_real_user": true,
             "saved_response": {
                 "answer": {
                     "parts": [
@@ -488,6 +489,8 @@
                     "points_possible": 2
                 }
             ],
+            "feedbackprompt": "Feedback default prompt",
+            "feedback_default_text": "Feedback default text",
             "assessments": {
                 "peer_assessment": {
                     "start": "2014-01-02T00:00",
@@ -772,6 +775,76 @@
             ]
         },
         "output": "oa_staff_area_full_grading_2.html"
+    },
+    {
+        "template": "openassessmentblock/staff_area/oa_staff_area.html",
+        "context": {
+            "is_enhanced_staff_grader_enabled": false,
+            "staff_assessment_required": true,
+            "staff_assessment_ungraded": 5,
+            "staff_assessment_in_progress": 2,
+            "status_counts": {
+                "self": 1,
+                "peer": 2,
+                "waiting": 3,
+                "done": 4
+            },
+            "num_submissions": 10,
+            "item_id": "test_item",
+            "step_dates": [
+                {
+                    "step": "submission",
+                    "start": "2014-01-01",
+                    "due": "N/A"
+                },
+                {
+                    "step": "peer",
+                    "start": "2014-02-02",
+                    "due": "N/A"
+                },
+                {
+                    "step": "self",
+                    "start": "2014-03-03",
+                    "due": "2015-04-05"
+                }
+            ]
+        },
+        "output": "oa_staff_area_full_grading_esg_disabled.html"
+    },
+    {
+        "template": "openassessmentblock/staff_area/oa_staff_area.html",
+        "context": {
+            "is_enhanced_staff_grader_enabled": true,
+            "staff_assessment_required": true,
+            "staff_assessment_ungraded": 5,
+            "staff_assessment_in_progress": 2,
+            "status_counts": {
+                "self": 1,
+                "peer": 2,
+                "waiting": 3,
+                "done": 4
+            },
+            "num_submissions": 10,
+            "item_id": "test_item",
+            "step_dates": [
+                {
+                    "step": "submission",
+                    "start": "2014-01-01",
+                    "due": "N/A"
+                },
+                {
+                    "step": "peer",
+                    "start": "2014-02-02",
+                    "due": "N/A"
+                },
+                {
+                    "step": "self",
+                    "start": "2014-03-03",
+                    "due": "2015-04-05"
+                }
+            ]
+        },
+        "output": "oa_staff_area_full_grading_esg_enabled.html"
     },
     {
         "template": "openassessmentblock/staff_area/oa_staff_area.html",

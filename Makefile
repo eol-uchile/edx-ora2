@@ -1,5 +1,5 @@
 .PHONY: help install-python install-js install-test install \
-		update-npm-requirements javascript sass \
+		update-npm-requirements static \
 		extract_translations compile_translations generate_dummy_translations validate_translations \
 		detect_changed_source_translations pull_translations push_translations check_translations_up_to_date \
 		quality test-python render-templates test-js test-js-debug test test-acceptance test-a11y test-sandbox \
@@ -35,18 +35,21 @@ install-test: ## install requirements for tests
 	pip install -r requirements/test.txt
 	python setup.py develop --quiet  # XBlock plugin (openassessment) has to be installed via entry_points.
 
-install: install-python install-js install-test javascript sass ## install all dependencies
+install: install-python install-js install-test static ## install all dependencies
 
 upgrade: export CUSTOM_COMPILE_COMMAND=make upgrade
 upgrade: ## update the requirements/*.txt files with the latest packages satisfying requirements/*.in
 	pip install -qr requirements/pip-tools.txt
+	pip-compile --upgrade --allow-unsafe -o requirements/pip.txt requirements/pip.in
 	pip-compile --upgrade -o requirements/pip-tools.txt requirements/pip-tools.in
+	pip install -qr requirements/pip.txt
+	pip install -qr requirements/pip-tools.txt
 	pip-compile --upgrade -o requirements/base.txt requirements/base.in
 	pip-compile --upgrade -o requirements/test.txt requirements/test.in
 	pip-compile --upgrade -o requirements/quality.txt requirements/quality.in
 	pip-compile --upgrade -o requirements/test-acceptance.txt requirements/test-acceptance.in
 	pip-compile --upgrade -o requirements/tox.txt requirements/tox.in
-	pip-compile --upgrade -o requirements/travis.txt requirements/travis.in
+	pip-compile --upgrade -o requirements/ci.txt requirements/ci.in
 	# Delete django pin from test requirements to avoid tox version collision
 	sed -i.tmp '/^[d|D]jango==/d' requirements/test.txt
 	sed -i.tmp '/^djangorestframework==/d' requirements/test.txt
@@ -69,12 +72,8 @@ update-npm-requirements: ## update NPM requrements
 	cp ./node_modules/backgrid/lib/backgrid*.js $(STATIC_JS)/lib/backgrid/
 	cp ./node_modules/backgrid/lib/backgrid*.css $(STATIC_CSS)/lib/backgrid/
 
-javascript: update-npm-requirements ## Minify JavaScript source files
-	node_modules/.bin/uglifyjs $(STATIC_JS)/src/oa_shared.js $(STATIC_JS)/src/*.js $(STATIC_JS)/src/lms/*.js $(STATIC_JS)/lib/backgrid/backgrid.min.js > "$(STATIC_JS)/openassessment-lms.min.js"
-	node_modules/.bin/uglifyjs $(STATIC_JS)/src/oa_shared.js $(STATIC_JS)/src/*.js $(STATIC_JS)/src/studio/*.js $(STATIC_JS)/lib/backgrid/backgrid.min.js > "$(STATIC_JS)/openassessment-studio.min.js"
-
-sass: ## Compile SASS files
-	python scripts/compile_sass.py
+static: ## Webpack JavaScript and SASS source files
+	npm run dev && npm run build
 
 ################
 #Translations Handling
@@ -97,7 +96,7 @@ detect_changed_source_translations: ## check if translation files are up-to-date
 	i18n_tool changed
 
 pull_translations: ## pull translations from Transifex
-	cd ./openassessment/ && tx pull -af --mode reviewed --minimum-perc=1
+	cd ./openassessment/ && tx pull -a -f --mode reviewed --minimum-perc=1
 
 push_translations: ## push source translation files (.po) to Transifex
 	tx push -s
@@ -109,7 +108,6 @@ check_translations_up_to_date: extract_translations compile_translations generat
 ################
 
 quality: ## Run linting and code quality checks
-	./node_modules/.bin/jshint $(STATIC_JS)/src -c .jshintrc --verbose
 	npm run lint
 	./scripts/run-pycodestyle.sh
 	./scripts/run-pylint.sh

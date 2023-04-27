@@ -1,14 +1,12 @@
 """
 Auto-auth page (used to automatically log in during testing).
 """
-from __future__ import absolute_import
+
 
 import json
 import os
 
-import six.moves.urllib.error  # pylint: disable=import-error
-import six.moves.urllib.parse  # pylint: disable=import-error
-import six.moves.urllib.request  # pylint: disable=import-error
+import urllib
 
 from bok_choy.page_object import PageObject
 
@@ -35,7 +33,7 @@ class AutoAuthPage(PageObject):
 
         Note that "global staff" is NOT the same as course staff.
         """
-        super(AutoAuthPage, self).__init__(browser)
+        super().__init__(browser)
 
         # Create query string parameters if provided
         self._params = {}
@@ -66,7 +64,7 @@ class AutoAuthPage(PageObject):
         Construct the URL.
         """
         url = ORA_SANDBOX_URL + "/auto_auth"
-        query_str = six.moves.urllib.parse.urlencode(self._params)
+        query_str = urllib.parse.urlencode(self._params)
 
         if query_str:
             url += "?" + query_str

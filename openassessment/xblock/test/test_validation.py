@@ -1,17 +1,12 @@
-# -*- coding: utf-8 -*-
 """
 Test OpenAssessment XBlock validation.
 """
-
-from __future__ import absolute_import
-
 import copy
 from datetime import datetime as dt
+from unittest import mock
 
 import ddt
-import mock
 import pytz
-from six.moves import range
 
 from django.test import TestCase
 
@@ -19,7 +14,9 @@ from openassessment.xblock.openassessmentblock import OpenAssessmentBlock
 from openassessment.xblock.validation import (validate_assessment_examples, validate_assessments, validate_dates,
                                               validate_rubric, validate_submission, validator)
 
-STUB_I18N = lambda x: x
+
+def STUB_I18N(x):
+    return x
 
 
 @ddt.ddt
@@ -32,7 +29,7 @@ class AssessmentValidationTest(TestCase):
             data["assessments"], data["current_assessments"], data["is_released"], STUB_I18N
         )
         self.assertTrue(success)
-        self.assertEqual(msg, u'')
+        self.assertEqual(msg, '')
 
     @ddt.file_data('data/invalid_assessments.json')
     def test_invalid_assessment(self, data):
@@ -102,7 +99,7 @@ class RubricValidationTest(TestCase):
             STUB_I18N
         )
         self.assertTrue(success)
-        self.assertEqual(msg, u'')
+        self.assertEqual(msg, '')
 
     @ddt.file_data('data/invalid_rubrics.json')
     def test_invalid_rubric(self, data):
@@ -123,7 +120,7 @@ class AssessmentExamplesValidationTest(TestCase):
     def test_valid_assessment_examples(self, data):
         success, msg = validate_assessment_examples(data['rubric'], data['assessments'], STUB_I18N)
         self.assertTrue(success)
-        self.assertEqual(msg, u'')
+        self.assertEqual(msg, '')
 
     @ddt.file_data('data/invalid_assessment_examples.json')
     def test_invalid_assessment_examples(self, data):
@@ -137,12 +134,24 @@ class DateValidationTest(TestCase):
     """ Test ora for example dates. """
 
     def setUp(self):
-        super(DateValidationTest, self).setUp()
+        super().setUp()
         self.DATES = {  # pylint: disable=invalid-name
             (day - 1): dt(2014, 1, day).replace(tzinfo=pytz.UTC).isoformat()
             for day in range(1, 15)
         }
         self.DATES[None] = None
+
+    def date(self, data, key):
+        """
+        Input data dict specifies the index for each date
+        """
+        return self.DATES[data[key]]
+
+    def date_range(self, data, start_key, due_key):
+        """
+        This function is a convenience to map these dates to (start, due) tuples
+        """
+        return (self.date(data, start_key), self.date(data, due_key))
 
     # There are a few test cases here that might seem incorrect:
     # * xblock_due_before_self_due
@@ -155,40 +164,27 @@ class DateValidationTest(TestCase):
     # See the docstring for `resolve_dates` for a more detailed justification.
     @ddt.file_data('data/valid_dates.json')
     def test_valid_dates(self, data):
-
-        # Input data dict specifies the index for each date
-        date = lambda key: self.DATES[data[key]]
-
-        # This lambda is a convenience to map these dates to (start, due) tuples
-        date_range = lambda start_key, due_key: (date(start_key), date(due_key))
-
         success, msg = validate_dates(
-            date('xblock_start'), date('xblock_due'),
+            self.date(data, 'xblock_start'), self.date(data, 'xblock_due'),
             [
-                date_range('submission_start', 'submission_due'),
-                date_range('peer_start', 'peer_due'),
-                date_range('self_start', 'self_due'),
+                self.date_range(data, 'submission_start', 'submission_due'),
+                self.date_range(data, 'peer_start', 'peer_due'),
+                self.date_range(data, 'self_start', 'self_due'),
             ],
             STUB_I18N
         )
 
         self.assertTrue(success, msg=msg)
-        self.assertEqual(msg, u'')
+        self.assertEqual(msg, '')
 
     @ddt.file_data('data/invalid_dates.json')
     def test_invalid_dates(self, data):
-        # Input data dict specifies the index for each date
-        date = lambda key: self.DATES[data[key]]
-
-        # This lambda is a convenience to map these dates to (start, due) tuples
-        date_range = lambda start_key, due_key: (date(start_key), date(due_key))
-
         success, msg = validate_dates(
-            date('xblock_start'), date('xblock_due'),
+            self.date(data, 'xblock_start'), self.date(data, 'xblock_due'),
             [
-                date_range('submission_start', 'submission_due'),
-                date_range('peer_start', 'peer_due'),
-                date_range('self_start', 'self_due'),
+                self.date_range(data, 'submission_start', 'submission_due'),
+                self.date_range(data, 'peer_start', 'peer_due'),
+                self.date_range(data, 'self_start', 'self_due'),
             ],
             STUB_I18N
         )
@@ -289,7 +285,7 @@ class ValidationIntegrationTest(TestCase):
         """
         Mock the OA XBlock and create a validator function.
         """
-        super(ValidationIntegrationTest, self).setUp()
+        super().setUp()
         self.oa_block = mock.MagicMock(OpenAssessmentBlock)
         self.oa_block.is_released.return_value = False
         self.oa_block.rubric_assessments.return_value = []
@@ -313,8 +309,8 @@ class ValidationIntegrationTest(TestCase):
         is_valid, msg = self.validator(self.RUBRIC, mutated_assessments)
         self.assertFalse(is_valid)
         self.assertEqual(msg, (
-            u'Example 1 has an extra option for \"Invalid criterion!"; '
-            u'Example 1 is missing an option for "vocabulary"'
+            'Example 1 has an extra option for \"Invalid criterion!"; '
+            'Example 1 is missing an option for "vocabulary"'
         ))
 
     def test_student_training_examples_invalid_option(self):
@@ -325,7 +321,7 @@ class ValidationIntegrationTest(TestCase):
         # Expect a validation error
         is_valid, msg = self.validator(self.RUBRIC, mutated_assessments)
         self.assertFalse(is_valid)
-        self.assertEqual(msg, u'Example 1 has an invalid option for "vocabulary": "Invalid option!"')
+        self.assertEqual(msg, 'Example 1 has an invalid option for "vocabulary": "Invalid option!"')
 
     def test_leaderboard_num_validation(self):
         self._assert_leaderboard_num_valid(-1, False)
@@ -349,10 +345,10 @@ class ValidationIntegrationTest(TestCase):
         """
         is_valid, msg = self.validator(self.RUBRIC, self.ASSESSMENTS, num)
         if expected_is_valid:
-            self.assertTrue(is_valid, msg=u"Leaderboard num {num} should be valid".format(num=num))
+            self.assertTrue(is_valid, msg=f"Leaderboard num {num} should be valid")
             self.assertEqual(msg, '')
         else:
-            self.assertFalse(is_valid, msg=u"Leaderboard num {num} should be invalid".format(num=num))
+            self.assertFalse(is_valid, msg=f"Leaderboard num {num} should be invalid")
             self.assertEqual(msg, 'Leaderboard number is invalid.')
 
 
@@ -364,23 +360,23 @@ class ValidationSubmissionTest(TestCase):
     PROMPT = [{"description": "A prompt."}, {"description": "Another prompt."}]
 
     def test_valid_submissions(self):
-        success, _ = validate_submission([u"A response."], [{"description": "A prompt."}], STUB_I18N)
+        success, _ = validate_submission(["A response."], [{"description": "A prompt."}], STUB_I18N)
         self.assertTrue(success)
 
         success, _ = validate_submission(
-            [u"Response 1.", u"Response 2"], self.PROMPT, STUB_I18N
+            ["Response 1.", "Response 2"], self.PROMPT, STUB_I18N
         )
         self.assertTrue(success)
 
     def test_invalid_submissions(self):
         # Submission is not list.
-        success, _ = validate_submission(u"A response.", self.PROMPT, STUB_I18N)
+        success, _ = validate_submission("A response.", self.PROMPT, STUB_I18N)
         self.assertFalse(success)
 
         # Submission count does not match prompt count.
-        success, _ = validate_submission([u"A response."], self.PROMPT, STUB_I18N)
+        success, _ = validate_submission(["A response."], self.PROMPT, STUB_I18N)
         self.assertFalse(success)
 
         # Submission is not unicode.
-        success, _ = validate_submission([u"A response.", b"Another response"], self.PROMPT, STUB_I18N)
+        success, _ = validate_submission(["A response.", b"Another response"], self.PROMPT, STUB_I18N)
         self.assertFalse(success)

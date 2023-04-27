@@ -1,9 +1,6 @@
-# -*- coding: utf-8 -*-
 """
 Test OpenAssessment XBlock data_conversion.
 """
-
-from __future__ import absolute_import
 
 import ddt
 

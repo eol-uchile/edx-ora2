@@ -1,13 +1,10 @@
 """
 Create dummy submissions and assessments for testing.
 """
-from __future__ import absolute_import, print_function
+
 
 import copy
 from uuid import uuid4
-
-import six
-from six.moves import range
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -43,8 +40,8 @@ class Command(BaseCommand):
     def __init__(self, *args, **kwargs):
         self.self_assessment_required = kwargs.get('self_assessment_required', False)
         kwargs = {}
-        super(Command, self).__init__(*args, **kwargs)
-        self._student_items = list()
+        super().__init__(*args, **kwargs)
+        self._student_items = []
 
     def handle(self, *args, **options):
         """
@@ -59,21 +56,21 @@ class Command(BaseCommand):
         if len(args) < 4:
             raise CommandError('Usage: create_oa_submissions <COURSE_ID> <ITEM_ID> <NUM_SUBMISSIONS> <PERCENTAGE>')
 
-        course_id = six.text_type(args[0])
-        item_id = six.text_type(args[1])
+        course_id = str(args[0])
+        item_id = str(args[1])
 
         try:
             num_submissions = int(args[2])
-        except ValueError:
-            raise CommandError('Number of submissions must be an integer')
+        except ValueError as ex:
+            raise CommandError('Number of submissions must be an integer') from ex
 
         try:
             percentage = float(args[3])
             assessments_to_create = (percentage / 100) * num_submissions
-        except ValueError:
-            raise CommandError('Percentage for completed submissions must be an integer or float')
+        except ValueError as ex:
+            raise CommandError('Percentage for completed submissions must be an integer or float') from ex
 
-        print(u"Creating {num} submissions for {item} in {course}".format(
+        print("Creating {num} submissions for {item} in {course}".format(
             num=num_submissions, item=item_id, course=course_id
         ))
 
@@ -81,7 +78,7 @@ class Command(BaseCommand):
 
         for sub_num in range(num_submissions):
 
-            print(u"Creating submission {num}".format(num=sub_num))
+            print(f"Creating submission {sub_num}")
 
             # Create a dummy submission
             student_item = {
@@ -98,9 +95,9 @@ class Command(BaseCommand):
 
             # Create peer assessments
             for num in range(self.NUM_PEER_ASSESSMENTS):
-                print(u"-- Creating peer-workflow {num}".format(num=num))
+                print(f"-- Creating peer-workflow {num}")
 
-                scorer_id = 'test_{num}'.format(num=num)
+                scorer_id = f'test_{num}'
 
                 # The scorer needs to make a submission before assessing
                 scorer_student_item = copy.copy(student_item)
@@ -112,7 +109,7 @@ class Command(BaseCommand):
                 # exactly which submission we want to score.
                 peer_api.create_peer_workflow_item(scorer_submission_uuid, submission_uuid)
                 if assessments_created < assessments_to_create:
-                    print(u"-- Creating peer-assessment {num}".format(num=num))
+                    print(f"-- Creating peer-assessment {num}")
                     # Create the peer assessment
                     peer_api.create_assessment(
                         scorer_submission_uuid,
@@ -125,12 +122,12 @@ class Command(BaseCommand):
 
             if self.self_assessment_required:
                 # Create a self-assessment
-                print(u"-- Creating self assessment")
+                print("-- Creating self assessment")
                 self_api.create_assessment(
                     submission_uuid, student_item['student_id'],
                     options_selected, {}, "  ".join(loremipsum.get_paragraphs(2)), rubric
                 )
-        print(u"%s assessments being completed for %s submissions" % (assessments_created, num_submissions))
+        print(f"{assessments_created} assessments being completed for {num_submissions} submissions")
 
     @property
     def student_items(self):
@@ -169,8 +166,8 @@ class Command(BaseCommand):
             rubric (dict)
             options_selected (dict)
         """
-        rubric = {'criteria': list()}
-        options_selected = dict()
+        rubric = {'criteria': []}
+        options_selected = {}
         words = loremipsum.Generator().words
 
         for criteria_num in range(self.NUM_CRITERIA):
@@ -178,7 +175,7 @@ class Command(BaseCommand):
                 'name': words[criteria_num],
                 'prompt': "  ".join(loremipsum.get_sentences(2)),
                 'order_num': criteria_num,
-                'options': list()
+                'options': []
             }
 
             for option_num in range(self.NUM_OPTIONS):

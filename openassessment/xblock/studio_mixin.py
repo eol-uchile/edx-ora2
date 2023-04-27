@@ -1,31 +1,26 @@
 """
 Studio editing view for OpenAssessment XBlock.
 """
-from __future__ import absolute_import
+
 
 import copy
 import logging
 from uuid import uuid4
 
-import pkg_resources
-import six
-from six.moves import zip
-
-from django.conf import settings
-from django.template.loader import get_template
-from django.utils.translation import ugettext_lazy
-
 from voluptuous import MultipleInvalid
-from xblock.fields import List, Scope
-from xblock.core import XBlock
 from web_fragments.fragment import Fragment
-from openassessment.xblock.data_conversion import (
-    create_rubric_dict,
-    make_django_template_key,
-    update_assessments_format
-)
+from xblock.core import XBlock
+from xblock.fields import List, Scope
+
+from django.template.loader import get_template
+from django.utils.translation import gettext_lazy
+
+from openassessment.xblock.data_conversion import (create_rubric_dict, make_django_template_key,
+                                                   update_assessments_format)
 from openassessment.xblock.defaults import DEFAULT_EDITOR_ASSESSMENTS_ORDER, DEFAULT_RUBRIC_FEEDBACK_TEXT
-from openassessment.xblock.resolve_dates import resolve_dates
+from openassessment.xblock.editor_config import AVAILABLE_EDITORS
+from openassessment.xblock.load_static import LoadStatic
+from openassessment.xblock.resolve_dates import DateValidationError, InvalidDateFormat, parse_date_value, resolve_dates
 from openassessment.xblock.schema import EDITOR_UPDATE_SCHEMA
 from openassessment.xblock.validation import validator
 
@@ -49,9 +44,14 @@ class StudioMixin:
     ]
 
     NECESSITY_OPTIONS = {
-        "required": ugettext_lazy("Required"),
-        "optional": ugettext_lazy("Optional"),
-        "": ugettext_lazy("None")
+        "required": gettext_lazy("Required"),
+        "optional": gettext_lazy("Optional"),
+        "": gettext_lazy("None")
+    }
+
+    # Build editor options from AVAILABLE_EDITORS
+    AVAILABLE_EDITOR_OPTIONS = {
+        key: val.get('display_name', key) for key, val in AVAILABLE_EDITORS.items()
     }
 
     STUDIO_EDITING_TEMPLATE = 'openassessmentblock/edit/oa_edit.html'
@@ -83,15 +83,12 @@ class StudioMixin:
             self.STUDIO_EDITING_TEMPLATE
         ).render(self.editor_context())
         fragment = Fragment(rendered_template)
-        if settings.DEBUG:
-            self.add_javascript_files(fragment, "static/js/src/oa_shared.js")
-            self.add_javascript_files(fragment, "static/js/src/oa_server.js")
-            self.add_javascript_files(fragment, "static/js/src/studio")
-        else:
-            # TODO: switch to add_javascript_url once XBlock resources are loaded from the CDN
-            js_bytes = pkg_resources.resource_string(__name__, "static/js/openassessment-studio.min.js")
-            fragment.add_javascript(js_bytes.decode('utf-8'))
+
+        fragment.add_javascript_url(LoadStatic.get_url('openassessment-studio.js'))
+
         js_context_dict = {
+            "ALLOWED_IMAGE_EXTENSIONS": self.ALLOWED_IMAGE_EXTENSIONS,
+            "ALLOWED_FILE_EXTENSIONS": self.ALLOWED_FILE_EXTENSIONS,
             "FILE_EXT_BLACK_LIST": self.FILE_EXT_BLACK_LIST,
         }
         fragment.initialize_js('OpenAssessmentEditor', js_context_dict)
@@ -111,16 +108,32 @@ class StudioMixin:
         # In the authoring GUI, date and time fields should never be null.
         # Therefore, we need to resolve all "default" dates to datetime objects
         # before displaying them in the editor.
-        __, __, date_ranges = resolve_dates(  # pylint: disable=redeclared-assigned-name
-            self.start, self.due,
-            [
-                (self.submission_start, self.submission_due)
+        try:
+            __, __, date_ranges = resolve_dates(  # pylint: disable=redeclared-assigned-name
+                self.start, self.due,
+                [
+                    (self.submission_start, self.submission_due)
+                ] + [
+                    (asmnt.get('start'), asmnt.get('due'))
+                    for asmnt in self.valid_assessments
+                ],
+                self._
+            )
+        except (DateValidationError, InvalidDateFormat):
+            # If the dates are somehow invalid, we still want users to be able to edit the ORA,
+            # so just present the dates as they are.
+            def _parse_date_safe(date):
+                try:
+                    return parse_date_value(date, self._)
+                except InvalidDateFormat:
+                    return ''
+
+            date_ranges = [
+                (_parse_date_safe(self.submission_start), _parse_date_safe(self.submission_due))
             ] + [
-                (asmnt.get('start'), asmnt.get('due'))
+                (_parse_date_safe(asmnt.get('start')), _parse_date_safe(asmnt.get('due')))
                 for asmnt in self.valid_assessments
-            ],
-            self._
-        )
+            ]
 
         submission_start, submission_due = date_ranges[0]
         assessments = self._assessments_editor_context(date_ranges[1:])
@@ -140,6 +153,15 @@ class StudioMixin:
             feedback_default_text = DEFAULT_RUBRIC_FEEDBACK_TEXT
         course_id = self.location.course_key if hasattr(self, 'location') else None
 
+        # If allowed file types haven't been explicitly set, load from a preset
+        white_listed_file_types = self.get_allowed_file_types_or_preset()
+        white_listed_file_types_string = ','.join(white_listed_file_types) if white_listed_file_types else ''
+
+        # If rubric reuse is enabled, include information about the other ORAs in this course
+        rubric_reuse_data = {}
+        if self.is_rubric_reuse_enabled:
+            rubric_reuse_data = self.get_other_ora_blocks_for_rubric_editor_context()
+
         return {
             'prompts': self.prompts,
             'prompts_type': self.prompts_type,
@@ -151,10 +173,13 @@ class StudioMixin:
             'feedbackprompt': self.rubric_feedback_prompt,
             'feedback_default_text': feedback_default_text,
             'text_response': self.text_response if self.text_response else '',
+            'text_response_editor': self.text_response_editor if self.text_response_editor else 'text',
             'file_upload_response': self.file_upload_response if self.file_upload_response else '',
             'necessity_options': self.NECESSITY_OPTIONS,
+            'available_editor_options': self.AVAILABLE_EDITOR_OPTIONS,
             'file_upload_type': self.file_upload_type,
-            'white_listed_file_types': self.white_listed_file_types_string,
+            'allow_multiple_files': self.allow_multiple_files,
+            'white_listed_file_types': white_listed_file_types_string,
             'allow_latex': self.allow_latex,
             'leaderboard_show': self.leaderboard_show,
             'editor_assessments_order': [
@@ -167,6 +192,10 @@ class StudioMixin:
             'is_released': self.is_released(),
             'teamsets': self.get_teamsets(course_id),
             'selected_teamset_id': self.selected_teamset_id,
+            'show_rubric_during_response': self.show_rubric_during_response,
+            'rubric_reuse_enabled': self.is_rubric_reuse_enabled,
+            'rubric_reuse_data': rubric_reuse_data,
+            'block_location': str(self.location),
         }
 
     @XBlock.json_handler
@@ -207,13 +236,16 @@ class StudioMixin:
                 return {'success': False, 'msg': self._('Error updating XBlock configuration')}
 
         if not data['text_response'] and not data['file_upload_response']:
-            return {'success': False, 'msg': self._("Error: both text and file upload responses can't be disabled")}
+            return {
+                'success': False,
+                'msg': self._("Error: Text Response and File Upload Response cannot both be disabled")
+            }
         if not data['text_response'] and data['file_upload_response'] == 'optional':
             return {'success': False,
-                    'msg': self._("Error: in case if text response is disabled file upload response must be required")}
+                    'msg': self._("Error: When Text Response is disabled, File Upload Response must be Required")}
         if not data['file_upload_response'] and data['text_response'] == 'optional':
             return {'success': False,
-                    'msg': self._("Error: in case if file upload response is disabled text response must be required")}
+                    'msg': self._("Error: When File Upload Response is disabled, Text Response must be Required")}
 
         # Backwards compatibility: We used to treat "name" as both a user-facing label
         # and a unique identifier for criteria and options.
@@ -237,7 +269,7 @@ class StudioMixin:
             leaderboard_show=data['leaderboard_show']
         )
         if not success:
-            return {'success': False, 'msg': self._(u'Validation error: {error}').format(error=msg)}
+            return {'success': False, 'msg': self._('Validation error: {error}').format(error=msg)}
 
         # At this point, all the input data has been validated,
         # so we can safely modify the XBlock fields.
@@ -253,6 +285,7 @@ class StudioMixin:
         self.submission_start = data['submission_start']
         self.submission_due = data['submission_due']
         self.text_response = data['text_response']
+        self.text_response_editor = data['text_response_editor']
         self.file_upload_response = data['file_upload_response']
         if data['file_upload_response']:
             self.file_upload_type = data['file_upload_type']
@@ -260,12 +293,14 @@ class StudioMixin:
         else:
             self.file_upload_type = None
             self.white_listed_file_types_string = None
+        self.allow_multiple_files = bool(data['allow_multiple_files'])
         self.allow_latex = bool(data['allow_latex'])
         self.leaderboard_show = data['leaderboard_show']
         self.teams_enabled = bool(data.get('teams_enabled', False))
         self.selected_teamset_id = data.get('selected_teamset_id', '')
+        self.show_rubric_during_response = data.get('show_rubric_during_response', False)
 
-        return {'success': True, 'msg': self._(u'Successfully updated OpenAssessment XBlock')}
+        return {'success': True, 'msg': self._('Successfully updated OpenAssessment XBlock')}
 
     @XBlock.json_handler
     def check_released(self, data, suffix=''):  # pylint: disable=unused-argument
@@ -284,7 +319,7 @@ class StudioMixin:
         # There aren't currently any server-side error conditions we report to the client,
         # but we send success/msg values anyway for consistency with other handlers.
         return {
-            'success': True, 'msg': u'',
+            'success': True, 'msg': '',
             'is_released': self.is_released()
         }
 
@@ -399,7 +434,7 @@ class StudioMixin:
 
         placeholder_id = uuid4().hex
         # create a dummy asset location with a fake but unique name. strip off the name, and return it
-        url_path = six.text_type(course_key.make_asset_key('asset', placeholder_id).for_branch(None))
+        url_path = str(course_key.make_asset_key('asset', placeholder_id).for_branch(None))
         if not url_path.startswith('/'):
             url_path = '/' + url_path
         return url_path.replace(placeholder_id, '')

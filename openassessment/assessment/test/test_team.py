@@ -1,9 +1,9 @@
 """
 Tests for team assessments.
 """
-from __future__ import absolute_import
 
-import mock
+
+from unittest import mock
 from freezegun import freeze_time
 
 from django.utils.timezone import now
@@ -37,12 +37,12 @@ class TestTeamApi(CacheResetTest):
         team_member_1_id = UserFactory.create().id
         team_member_2_id = UserFactory.create().id
         user_ids = [cls.submitting_user_id, team_member_1_id, team_member_2_id]
-        cls.team_member_ids = ['anon_id_for_{}'.format(user_id) for user_id in user_ids]
+        cls.team_member_ids = [f'anon_id_for_{user_id}' for user_id in user_ids]
 
         cls.default_assessment = (
             cls.staff_user_id,  # scorer_id
             OPTIONS_SELECTED_DICT["few"]["options"],  # options_selected
-            dict(),  # critereon_feedback
+            {},  # critereon_feedback
             '',  # overall_feedback
             RUBRIC  # rubric_dict
         )
@@ -180,8 +180,8 @@ class TestTeamApi(CacheResetTest):
         # Then the API returns the rubric dictionary...
         # TODO... with the correct scores
         self.assertEqual(
-            score_criteria.keys(),
-            OPTIONS_SELECTED_DICT["few"]["options"].keys()
+            set(score_criteria.keys()),
+            set(OPTIONS_SELECTED_DICT["few"]["options"].keys())
         )
 
     def test_get_submission_to_assess_none(self):
@@ -280,7 +280,7 @@ class TestTeamApi(CacheResetTest):
         assessments = teams_api.create_assessment(
             team_submission_uuid,
             self.staff_user_id,
-            OPTIONS_SELECTED_DICT["few"]["options"], dict(), "",
+            OPTIONS_SELECTED_DICT["few"]["options"], {}, "",
             RUBRIC
         )
         return assessments

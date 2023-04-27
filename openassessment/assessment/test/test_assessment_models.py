@@ -1,19 +1,18 @@
-# coding=utf-8
 """
 Tests for the assessment Django models.
 """
-from __future__ import absolute_import
+
 
 import copy
 
 import ddt
 
+from submissions.api import create_submission
 from openassessment.assessment.api.self import create_assessment
 from openassessment.assessment.errors import SelfAssessmentRequestError
 from openassessment.assessment.models import Assessment, AssessmentPart, InvalidRubricSelection
 from openassessment.assessment.serializers import rubric_from_dict
 from openassessment.test_utils import CacheResetTest
-from submissions.api import create_submission
 
 from .constants import RUBRIC
 
@@ -32,11 +31,11 @@ class AssessmentTest(CacheResetTest):
         # We can't select an option for the last criterion, but we do
         # provide written feedback.
         selected = {
-            u"vøȼȺƀᵾłȺɍɏ": u"𝓰𝓸𝓸𝓭",
-            u"ﻭɼค๓๓คɼ": u"єχ¢єℓℓєηт",
+            "vøȼȺƀᵾłȺɍɏ": "𝓰𝓸𝓸𝓭",
+            "ﻭɼค๓๓คɼ": "єχ¢єℓℓєηт",
         }
         feedback = {
-            u"feedback": u"𝕿𝖍𝖎𝖘 𝖎𝖘 𝖘𝖔𝖒𝖊 𝖋𝖊𝖊𝖉𝖇𝖆𝖈𝖐."
+            "feedback": "𝕿𝖍𝖎𝖘 𝖎𝖘 𝖘𝖔𝖒𝖊 𝖋𝖊𝖊𝖉𝖇𝖆𝖈𝖐."
         }
         AssessmentPart.create_from_option_names(
             assessment, selected, feedback=feedback
@@ -48,7 +47,7 @@ class AssessmentTest(CacheResetTest):
 
         # Check the feedback text
         feedback_only = AssessmentPart.objects.get(criterion__name="feedback")
-        self.assertEqual(feedback_only.feedback, u"𝕿𝖍𝖎𝖘 𝖎𝖘 𝖘𝖔𝖒𝖊 𝖋𝖊𝖊𝖉𝖇𝖆𝖈𝖐.")
+        self.assertEqual(feedback_only.feedback, "𝕿𝖍𝖎𝖘 𝖎𝖘 𝖘𝖔𝖒𝖊 𝖋𝖊𝖊𝖉𝖇𝖆𝖈𝖐.")
 
     def test_create_with_all_feedback_only_criteria(self):
         rubric = self._rubric_with_all_feedback_only_criteria()
@@ -57,8 +56,8 @@ class AssessmentTest(CacheResetTest):
         # Create assessment parts, each of which are feedback-only (no points)
         selected = {}
         feedback = {
-            u"vøȼȺƀᵾłȺɍɏ": u"𝓰𝓸𝓸𝓭",
-            u"ﻭɼค๓๓คɼ": u"єχ¢єℓℓєηт",
+            "vøȼȺƀᵾłȺɍɏ": "𝓰𝓸𝓸𝓭",
+            "ﻭɼค๓๓คɼ": "єχ¢єℓℓєηт",
         }
         AssessmentPart.create_from_option_names(
             assessment, selected, feedback=feedback
@@ -76,8 +75,8 @@ class AssessmentTest(CacheResetTest):
         # but NO feedback.  This simulates how an example-based AI
         # assessment is created.
         selected = {
-            u"vøȼȺƀᵾłȺɍɏ": 2,
-            u"ﻭɼค๓๓คɼ": 1,
+            "vøȼȺƀᵾłȺɍɏ": 2,
+            "ﻭɼค๓๓คɼ": 1,
         }
         AssessmentPart.create_from_option_points(assessment, selected)
 
@@ -87,7 +86,7 @@ class AssessmentTest(CacheResetTest):
 
         # Check the feedback text (should default to an empty string)
         feedback_only = AssessmentPart.objects.get(criterion__name="feedback")
-        self.assertEqual(feedback_only.feedback, u"")
+        self.assertEqual(feedback_only.feedback, "")
 
     def test_create_from_option_points_all_feedback_only_criteria(self):
         rubric = self._rubric_with_all_feedback_only_criteria()
@@ -111,8 +110,8 @@ class AssessmentTest(CacheResetTest):
         # Note that this is different from providing an empty feedback dict;
         # here, we're not providing the `feedback` kwarg at all.
         selected = {
-            u"vøȼȺƀᵾłȺɍɏ": u"𝓰𝓸𝓸𝓭",
-            u"ﻭɼค๓๓คɼ": u"єχ¢єℓℓєηт",
+            "vøȼȺƀᵾłȺɍɏ": "𝓰𝓸𝓸𝓭",
+            "ﻭɼค๓๓คɼ": "єχ¢єℓℓєηт",
         }
         AssessmentPart.create_from_option_names(assessment, selected)
 
@@ -122,7 +121,7 @@ class AssessmentTest(CacheResetTest):
 
         # Check the feedback text, which should default to an empty string
         feedback_only = AssessmentPart.objects.get(criterion__name="feedback")
-        self.assertEqual(feedback_only.feedback, u"")
+        self.assertEqual(feedback_only.feedback, "")
 
     def test_no_feedback_provided_for_feedback_only_criterion(self):
         rubric = self._rubric_with_one_feedback_only_criterion()
@@ -131,8 +130,8 @@ class AssessmentTest(CacheResetTest):
         # Create assessment parts
         # Do NOT provide feedback for the feedback-only criterion
         selected = {
-            u"vøȼȺƀᵾłȺɍɏ": u"𝓰𝓸𝓸𝓭",
-            u"ﻭɼค๓๓คɼ": u"єχ¢єℓℓєηт",
+            "vøȼȺƀᵾłȺɍɏ": "𝓰𝓸𝓸𝓭",
+            "ﻭɼค๓๓คɼ": "єχ¢єℓℓєηт",
         }
         feedback = {}
 
@@ -145,8 +144,8 @@ class AssessmentTest(CacheResetTest):
         rubric_dict = copy.deepcopy(RUBRIC)
         rubric_dict['criteria'].append({
             "order_num": 2,
-            "name": u"feedback",
-            "prompt": u"only feedback, no points",
+            "name": "feedback",
+            "prompt": "only feedback, no points",
             "options": []
         })
         return rubric_from_dict(rubric_dict)
@@ -161,7 +160,7 @@ class AssessmentTest(CacheResetTest):
     @ddt.file_data('data/models_check_criteria_assessed.json')
     def test_check_all_criteria_assessed(self, data):
         student_item = {
-            'student_id': u'𝖙𝖊𝖘𝖙 𝖚𝖘𝖊𝖗',
+            'student_id': '𝖙𝖊𝖘𝖙 𝖚𝖘𝖊𝖗',
             'item_id': 'test_item',
             'course_id': 'test_course',
             'item_type': 'test_type'

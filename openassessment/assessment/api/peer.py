@@ -4,7 +4,7 @@ The Peer Assessment Workflow API exposes all public actions required to complete
 the workflow for a given submission.
 
 """
-from __future__ import absolute_import
+
 
 import logging
 
@@ -22,6 +22,56 @@ from openassessment.assessment.serializers import (AssessmentFeedbackSerializer,
 logger = logging.getLogger("openassessment.assessment.api.peer")  # pylint: disable=invalid-name
 
 PEER_TYPE = "PE"
+
+FLEXIBLE_PEER_GRADING_REQUIRED_SUBMISSION_AGE_IN_DAYS = 7
+FLEXIBLE_PEER_GRADING_GRADED_BY_PERCENTAGE = 30
+
+
+def required_peer_grades(submission_uuid, peer_requirements):
+    """
+    Given a submission id, finds how many peer assessment required.
+
+    Args:
+        submission_uuid (str): The UUID of the submission being tracked.
+        peer_requirements (dict): Dictionary with the key "must_grade" indicating
+            the required number of submissions the student must grade
+            and "enable_flexible_grading" indicating if flexible grading enabled.
+
+    Returns:
+        int
+    """
+
+    submission = sub_api.get_submission(submission_uuid)
+
+    must_grade = peer_requirements["must_be_graded_by"]
+
+    if peer_requirements.get("enable_flexible_grading"):
+
+        # find how many days elapsed since subimitted
+        days_elapsed = (timezone.now().date() - submission['submitted_at'].date()).days
+
+        # check if flexible grading applies. if it does, then update must_grade
+        if days_elapsed >= FLEXIBLE_PEER_GRADING_REQUIRED_SUBMISSION_AGE_IN_DAYS:
+            must_grade = int(must_grade * FLEXIBLE_PEER_GRADING_GRADED_BY_PERCENTAGE / 100)
+            if must_grade == 0:
+                must_grade = 1
+
+    return must_grade
+
+
+def can_be_skipped(submission_uuid, peer_requirements):  # pylint: disable=unused-argument
+    """
+    Peer workflow step can be always skipped.
+
+    Args:
+        submission_uuid (str): The UUID of the submission being tracked.
+        peer_requirements (dict): Dictionary with the key "must_grade" indicating
+            the required number of submissions the student must grade.
+
+    Returns:
+        bool
+    """
+    return peer_requirements is not None
 
 
 def submitter_is_finished(submission_uuid, peer_requirements):
@@ -55,8 +105,24 @@ def submitter_is_finished(submission_uuid, peer_requirements):
         return False
     except PeerWorkflow.DoesNotExist:
         return False
-    except KeyError:
-        raise PeerAssessmentRequestError(u'Requirements dict must contain "must_grade" key')
+    except KeyError as ex:
+        raise PeerAssessmentRequestError('Requirements dict must contain "must_grade" key') from ex
+
+
+def get_graded_by_count(submission_uuid):
+    """
+    Retrieve the number of peer assessments the submitter has received.
+    Returns None if no submission with this ID.
+    """
+    workflow = PeerWorkflow.get_by_submission_uuid(submission_uuid)
+    if workflow is None:
+        return None
+
+    scored_items = workflow.graded_by.filter(
+        assessment__submission_uuid=submission_uuid,
+        assessment__score_type=PEER_TYPE
+    )
+    return scored_items.count()
 
 
 def assessment_is_finished(submission_uuid, peer_requirements):
@@ -81,15 +147,11 @@ def assessment_is_finished(submission_uuid, peer_requirements):
     if not peer_requirements:
         return False
 
-    workflow = PeerWorkflow.get_by_submission_uuid(submission_uuid)
-    if workflow is None:
+    count = get_graded_by_count(submission_uuid)
+    if count is None:
         return False
 
-    scored_items = workflow.graded_by.filter(
-        assessment__submission_uuid=submission_uuid,
-        assessment__score_type=PEER_TYPE
-    )
-    return scored_items.count() >= peer_requirements["must_be_graded_by"]
+    return count >= required_peer_grades(submission_uuid, peer_requirements)
 
 
 def on_start(submission_uuid):
@@ -124,14 +186,14 @@ def on_start(submission_uuid):
         # If we get an integrity error, it means someone else has already
         # created a workflow for this submission, so we don't need to do anything.
         pass
-    except DatabaseError:
+    except DatabaseError as ex:
         error_message = (
-            u"An internal error occurred while creating a new peer "
-            u"workflow for submission {}"
+            "An internal error occurred while creating a new peer "
+            "workflow for submission {}"
             .format(submission_uuid)
         )
         logger.exception(error_message)
-        raise PeerAssessmentInternalError(error_message)
+        raise PeerAssessmentInternalError(error_message) from ex
 
 
 def get_score(submission_uuid, peer_requirements):
@@ -149,6 +211,7 @@ def get_score(submission_uuid, peer_requirements):
         contributing_assessments information, along with a None staff_id.
 
     """
+
     if peer_requirements is None:
         return None
 
@@ -168,8 +231,9 @@ def get_score(submission_uuid, peer_requirements):
         assessment__score_type=PEER_TYPE
     ).order_by('-assessment')
 
-    submission_finished = items.count() >= peer_requirements["must_be_graded_by"]
-    if not submission_finished:
+    # Check if enough peers have graded this submission
+    num_required_peer_grades = required_peer_grades(submission_uuid, peer_requirements)
+    if items.count() < num_required_peer_grades:
         return None
 
     # Unfortunately, we cannot use update() after taking a slice,
@@ -180,9 +244,10 @@ def get_score(submission_uuid, peer_requirements):
     # which is not supported by some versions of MySQL.
     # Although this approach generates more database queries, the number is likely to
     # be relatively small (at least 1 and very likely less than 5).
-    for scored_item in items[:peer_requirements["must_be_graded_by"]]:
-        scored_item.scored = True
-        scored_item.save()
+    for scored_item in items[:num_required_peer_grades]:
+        if not scored_item.scored:
+            scored_item.scored = True
+            scored_item.save()
     assessments = [item.assessment for item in items]
 
     return {
@@ -257,8 +322,8 @@ def create_assessment(
         peer_workflow_item = scorer_workflow.find_active_assessments()
         if peer_workflow_item is None:
             message = (
-                u"There are no open assessments associated with the scorer's "
-                u"submission UUID {}."
+                "There are no open assessments associated with the scorer's "
+                "submission UUID {}."
             ).format(scorer_submission_uuid)
             logger.warning(message)
             raise PeerAssessmentWorkflowError(message)
@@ -278,27 +343,27 @@ def create_assessment(
 
         _log_assessment(assessment, scorer_workflow)
         return full_assessment_dict(assessment)
-    except PeerWorkflow.DoesNotExist:
+    except PeerWorkflow.DoesNotExist as ex:
         message = (
-            u"There is no Peer Workflow associated with the given "
-            u"submission UUID {}."
+            "There is no Peer Workflow associated with the given "
+            "submission UUID {}."
         ).format(scorer_submission_uuid)
         logger.exception(message)
-        raise PeerAssessmentWorkflowError(message)
-    except InvalidRubric:
-        msg = u"The rubric definition is not valid."
+        raise PeerAssessmentWorkflowError(message) from ex
+    except InvalidRubric as ex:
+        msg = "The rubric definition is not valid."
         logger.exception(msg)
-        raise PeerAssessmentRequestError(msg)
-    except InvalidRubricSelection:
-        msg = u"Invalid options were selected in the rubric."
+        raise PeerAssessmentRequestError(msg) from ex
+    except InvalidRubricSelection as ex:
+        msg = "Invalid options were selected in the rubric."
         logger.warning(msg, exc_info=True)
-        raise PeerAssessmentRequestError(msg)
-    except DatabaseError:
+        raise PeerAssessmentRequestError(msg) from ex
+    except DatabaseError as ex:
         error_message = (
-            u"An error occurred while creating an assessment by the scorer with this ID: {}"
+            "An error occurred while creating an assessment by the scorer with this ID: {}"
         ).format(scorer_id)
         logger.exception(error_message)
-        raise PeerAssessmentInternalError(error_message)
+        raise PeerAssessmentInternalError(error_message) from ex
 
 
 @transaction.atomic
@@ -397,12 +462,12 @@ def get_rubric_max_scores(submission_uuid):
             criterion["name"]: criterion["points_possible"]
             for criterion in rubric_dict["criteria"]
         }
-    except DatabaseError:
+    except DatabaseError as ex:
         error_message = (
-            u"Error getting rubric options max scores for submission uuid {uuid}"
+            "Error getting rubric options max scores for submission uuid {uuid}"
         ).format(uuid=submission_uuid)
         logger.exception(error_message)
-        raise PeerAssessmentInternalError(error_message)
+        raise PeerAssessmentInternalError(error_message) from ex
 
 
 def get_assessment_median_scores(submission_uuid):
@@ -437,12 +502,12 @@ def get_assessment_median_scores(submission_uuid):
         return Assessment.get_median_score_dict(scores)
     except PeerWorkflow.DoesNotExist:
         return {}
-    except DatabaseError:
+    except DatabaseError as ex:
         error_message = (
-            u"Error getting assessment median scores for submission {uuid}"
+            "Error getting assessment median scores for submission {uuid}"
         ).format(uuid=submission_uuid)
         logger.exception(error_message)
-        raise PeerAssessmentInternalError(error_message)
+        raise PeerAssessmentInternalError(error_message) from ex
 
 
 def has_finished_required_evaluating(submission_uuid, required_assessments):
@@ -537,12 +602,12 @@ def get_assessments(submission_uuid, limit=None):
             score_type=PEER_TYPE
         )[:limit]
         return serialize_assessments(assessments)
-    except DatabaseError:
+    except DatabaseError as ex:
         error_message = (
-            u"Error getting assessments for submission {uuid}"
+            "Error getting assessments for submission {uuid}"
         ).format(uuid=submission_uuid)
         logger.exception(error_message)
-        raise PeerAssessmentInternalError(error_message)
+        raise PeerAssessmentInternalError(error_message) from ex
 
 
 def get_submitted_assessments(submission_uuid, limit=None):
@@ -603,12 +668,12 @@ def get_submitted_assessments(submission_uuid, limit=None):
         assessments = Assessment.objects.filter(
             pk__in=[item.assessment.pk for item in items])[:limit]
         return serialize_assessments(assessments)
-    except DatabaseError:
+    except DatabaseError as ex:
         error_message = (
-            u"Couldn't retrieve the assessments completed by the student with submission {uuid}"
+            "Couldn't retrieve the assessments completed by the student with submission {uuid}"
         ).format(uuid=submission_uuid)
         logger.exception(error_message)
-        raise PeerAssessmentInternalError(error_message)
+        raise PeerAssessmentInternalError(error_message) from ex
 
 
 def get_submission_to_assess(submission_uuid, graded_by):
@@ -659,8 +724,8 @@ def get_submission_to_assess(submission_uuid, graded_by):
 
     if not workflow:
         raise PeerAssessmentWorkflowError(
-            u"A Peer Assessment Workflow does not exist for the student "
-            u"with submission UUID {}".format(submission_uuid)
+            "A Peer Assessment Workflow does not exist for the student "
+            "with submission UUID {}".format(submission_uuid)
         )
 
     if workflow.is_cancelled:
@@ -681,21 +746,17 @@ def get_submission_to_assess(submission_uuid, graded_by):
             PeerWorkflow.create_item(workflow, peer_submission_uuid)
             _log_workflow(peer_submission_uuid, workflow)
             return submission_data
-        except sub_api.SubmissionNotFoundError:
-            error_message = (
-                u"Could not find a submission with the uuid {} for student {} "
-                u"in the peer workflow."
-            ).format(peer_submission_uuid, workflow.student_id)
-            logger.exception(error_message)
-            raise PeerAssessmentWorkflowError(error_message)
+        except sub_api.SubmissionNotFoundError as ex:
+            error_message = "Could not find a submission with the uuid %s for student %s in the peer workflow."
+            error_meesage_args = (peer_submission_uuid, workflow.student_id)
+            logger.exception(error_message, error_meesage_args[0], error_meesage_args[1])
+            raise PeerAssessmentWorkflowError(error_message % error_meesage_args) from ex
     else:
         logger.info(
-            u"No submission found for {} to assess ({}, {})"
-            .format(
-                workflow.student_id,
-                workflow.course_id,
-                workflow.item_id,
-            )
+            "No submission found for %s to assess (%s, %s)",
+            workflow.student_id,
+            workflow.course_id,
+            workflow.item_id
         )
         return None
 
@@ -735,13 +796,13 @@ def create_peer_workflow(submission_uuid):
         # If we get an integrity error, it means someone else has already
         # created a workflow for this submission, so we don't need to do anything.
         pass
-    except DatabaseError:
+    except DatabaseError as ex:
         error_message = (
-            u"An internal error occurred while creating a new peer "
-            u"workflow for submission {}"
+            "An internal error occurred while creating a new peer "
+            "workflow for submission {}"
         ).format(submission_uuid)
         logger.exception(error_message)
-        raise PeerAssessmentInternalError(error_message)
+        raise PeerAssessmentInternalError(error_message) from ex
 
 
 def create_peer_workflow_item(scorer_submission_uuid, submission_uuid):
@@ -785,13 +846,13 @@ def get_assessment_feedback(submission_uuid):
         return AssessmentFeedbackSerializer(feedback).data
     except AssessmentFeedback.DoesNotExist:
         return None
-    except DatabaseError:
+    except DatabaseError as ex:
         error_message = (
-            u"An error occurred retrieving assessment feedback for {}."
+            "An error occurred retrieving assessment feedback for {}."
             .format(submission_uuid)
         )
         logger.exception(error_message)
-        raise PeerAssessmentInternalError(error_message)
+        raise PeerAssessmentInternalError(error_message) from ex
 
 
 def set_assessment_feedback(feedback_dict):
@@ -813,10 +874,10 @@ def set_assessment_feedback(feedback_dict):
     """
     submission_uuid = feedback_dict.get('submission_uuid')
     feedback_text = feedback_dict.get('feedback_text')
-    selected_options = feedback_dict.get('options', list())
+    selected_options = feedback_dict.get('options', [])
 
     if feedback_text and len(feedback_text) > AssessmentFeedback.MAXSIZE:
-        error_message = u"Assessment feedback too large."
+        error_message = "Assessment feedback too large."
         raise PeerAssessmentRequestError(error_message)
 
     try:
@@ -826,7 +887,7 @@ def set_assessment_feedback(feedback_dict):
         if submission_uuid:
             feedback, created = AssessmentFeedback.objects.get_or_create(submission_uuid=submission_uuid)
         else:
-            error_message = u"An error occurred creating assessment feedback: bad or missing submission_uuid."
+            error_message = "An error occurred creating assessment feedback: bad or missing submission_uuid."
             logger.error(error_message)
             raise PeerAssessmentRequestError(error_message)
 
@@ -844,10 +905,10 @@ def set_assessment_feedback(feedback_dict):
         # Associate the feedback with scored assessments
         assessments = PeerWorkflowItem.get_scored_assessments(submission_uuid)
         feedback.assessments.add(*assessments)
-    except DatabaseError:
-        msg = u"Error occurred while creating or updating feedback on assessment: {}".format(feedback_dict)
+    except DatabaseError as ex:
+        msg = f"Error occurred while creating or updating feedback on assessment: {feedback_dict}"
         logger.exception(msg)
-        raise PeerAssessmentInternalError(msg)
+        raise PeerAssessmentInternalError(msg) from ex
 
 
 def _log_assessment(assessment, scorer_workflow):
@@ -864,17 +925,13 @@ def _log_assessment(assessment, scorer_workflow):
 
     """
     logger.info(
-        u"Created peer-assessment {assessment_id} for submission "
-        u"{submission_uuid}, course {course_id}, item {item_id} "
-        u"with rubric {rubric_content_hash}; scored by {scorer}"
-        .format(
-            assessment_id=assessment.id,
-            submission_uuid=assessment.submission_uuid,
-            course_id=scorer_workflow.course_id,
-            item_id=scorer_workflow.item_id,
-            rubric_content_hash=assessment.rubric.content_hash,
-            scorer=scorer_workflow.student_id,
-        )
+        "Created peer-assessment %s for submission %s, course %s, item %s with rubric %s; scored by %s",
+        assessment.id,
+        assessment.submission_uuid,
+        scorer_workflow.course_id,
+        scorer_workflow.item_id,
+        assessment.rubric.content_hash,
+        scorer_workflow.student_id,
     )
 
 
@@ -888,13 +945,11 @@ def _log_workflow(submission_uuid, workflow):
             assessment.
     """
     logger.info(
-        u"Retrieved submission {} ({}, {}) to be assessed by {}"
-        .format(
-            submission_uuid,
-            workflow.course_id,
-            workflow.item_id,
-            workflow.student_id,
-        )
+        "Retrieved submission %s (%s, %s) to be assessed by %s",
+        submission_uuid,
+        workflow.course_id,
+        workflow.item_id,
+        workflow.student_id,
     )
 
 
@@ -934,11 +989,52 @@ def on_cancel(submission_uuid):
         if workflow:
             workflow.cancelled_at = timezone.now()
             workflow.save()
-    except (PeerAssessmentWorkflowError, DatabaseError):
+    except (PeerAssessmentWorkflowError, DatabaseError) as ex:
         error_message = (
-            u"An internal error occurred while cancelling the peer"
-            u"workflow for submission {}"
+            "An internal error occurred while cancelling the peer"
+            "workflow for submission {}"
             .format(submission_uuid)
         )
         logger.exception(error_message)
-        raise PeerAssessmentInternalError(error_message)
+        raise PeerAssessmentInternalError(error_message) from ex
+
+
+def get_waiting_step_details(
+    course_id,
+    item_id,
+    submission_uuids,
+    must_be_graded_by
+):
+    """
+    Proxy method to `get_waiting_step_details` model method.
+    Retrieves information about users in the waiting step (waiting for peer reviews).
+
+    Args:
+        course_id (str): The course that this problem belongs to.
+        item_id (str): The student_item (problem) that we want to know statistics about.
+        submission_uuids (list): A list of submission UUIDs to filter the results for,
+                                    if None is given, this will return all students which
+                                    the peer step is not complete.
+        must_be_graded_by (int): number of required peer reviews for this problem.
+
+    Returns:
+        dict: a dictionary that contains information about students in the waiting step.
+              The dictionary includes the following information: `student_id`, `created_at` (
+              timestamp of when the step was created), `graded` (how many peers the student
+              graded) and `graded_by` (how many peers graded this student).
+    """
+    return PeerWorkflow.get_waiting_step_details(
+        course_id,
+        item_id,
+        submission_uuids,
+        must_be_graded_by
+    )
+
+
+def get_bulk_scored_assessments(submission_uuids):
+    """
+    Given a list of submission uuids, return a set of assessments that
+    are "scored", which is to say, included in the calculation of the final score,
+    as opposed to "extra" peer reviews.
+    """
+    return set(PeerWorkflowItem.get_bulk_scored_assessments(submission_uuids))

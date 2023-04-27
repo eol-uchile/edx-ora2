@@ -1,20 +1,26 @@
 """ A Mixin for Response submissions. """
-from __future__ import absolute_import, unicode_literals
-
+import copy
 import json
 import logging
+import os
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.functional import cached_property
-import six
-
 from xblock.core import XBlock
 from xblock.exceptions import NoSuchServiceError
+
+from submissions.team_api import get_team_submission
+
 from openassessment.fileupload import api as file_upload_api
 from openassessment.fileupload.exceptions import FileUploadError
 from openassessment.workflow.errors import AssessmentWorkflowError
 
-from .data_conversion import create_submission_dict, prepare_submission_for_serialization
+from ..data import OraSubmissionAnswerFactory
+from .data_conversion import (
+    create_submission_dict,
+    list_to_conversational_format,
+    prepare_submission_for_serialization
+)
 from .resolve_dates import DISTANT_FUTURE
 from .user_data import get_user_preferences
 from .validation import validate_submission
@@ -23,6 +29,10 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 class NoTeamToCreateSubmissionForError(Exception):
+    pass
+
+
+class EmptySubmissionError(Exception):
     pass
 
 
@@ -40,8 +50,10 @@ class SubmissionMixin:
     """
 
     ALLOWED_IMAGE_MIME_TYPES = ['image/gif', 'image/jpeg', 'image/pjpeg', 'image/png']  # pragma: no cover
+    ALLOWED_IMAGE_EXTENSIONS = ['gif', 'jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png']  # pragma: no cover
 
     ALLOWED_FILE_MIME_TYPES = ['application/pdf'] + ALLOWED_IMAGE_MIME_TYPES  # pragma: no cover
+    ALLOWED_FILE_EXTENSIONS = ['pdf'] + ALLOWED_IMAGE_EXTENSIONS  # pragma: no cover
 
     MAX_FILES_COUNT = 20  # pragma: no cover
 
@@ -58,6 +70,18 @@ class SubmissionMixin:
         'rgs', 'run', 'sct', 'shb', 'shs', 'u3p', 'vbscript', 'vbe', 'workflow',
         'htm', 'html',
     ]
+
+    FILE_UPLOAD_PRESETS = {
+        'image': {
+            'mime_types': ALLOWED_IMAGE_MIME_TYPES,
+            'extensions': ALLOWED_IMAGE_EXTENSIONS
+        },
+        'pdf-and-image': {
+            'mime_types': ALLOWED_FILE_MIME_TYPES,
+            'extensions': ALLOWED_FILE_EXTENSIONS,
+        },
+        'custom': {}
+    }
 
     @cached_property
     def file_manager(self):
@@ -91,7 +115,7 @@ class SubmissionMixin:
             return (
                 False,
                 'EBADARGS',
-                self._(u'"submission" required to submit answer.')
+                self._('"submission" required to submit answer.')
             )
 
         status = False
@@ -112,13 +136,13 @@ class SubmissionMixin:
             return (
                 False,
                 'ENOPREVIEW',
-                self._(u'To submit a response, view this component in Preview or Live mode.')
+                self._('To submit a response, view this component in Preview or Live mode.')
             )
 
         workflow = self.get_workflow_info()
 
         status_tag = 'ENOMULTI'  # It is an error to submit multiple times for the same item
-        status_text = self._(u'Multiple submissions are not allowed.')
+        status_text = self._('Multiple submissions are not allowed.')
 
         if not workflow:
             try:
@@ -146,23 +170,44 @@ class SubmissionMixin:
                     for answer_err in err.field_errors.get('answer', [])
                 )
                 if answer_too_long:
+                    logger.exception(
+                        f"Response exceeds maximum allowed size: {student_item_dict}"
+                    )
                     status_tag = 'EANSWERLENGTH'
+                    max_size = f"({int(api.Submission.MAXSIZE / 1024)} KB)"
+                    base_error = self._("Response exceeds maximum allowed size.")
+                    extra_info = self._(
+                        "Note: if you have a spellcheck or grammar check browser extension, "
+                        "try disabling, reloading, and reentering your response before submitting."
+                    )
+                    status_text = f"{base_error} {max_size} {extra_info}"
                 else:
                     msg = (
-                        u"The submissions API reported an invalid request error "
-                        u"when submitting a response for the user: {student_item}"
+                        "The submissions API reported an invalid request error "
+                        "when submitting a response for the user: {student_item}"
                     ).format(student_item=student_item_dict)
                     logger.exception(msg)
                     status_tag = 'EBADFORM'
                     status_text = msg
+            except EmptySubmissionError:
+                msg = (
+                    "Attempted to submit submission for user {student_item}, "
+                    "but submission contained no content."
+                ).format(student_item=student_item_dict)
+                logger.exception(msg)
+                status_tag = 'EEMPTYSUB'
+                status_text = self._(
+                    'Submission cannot be empty. '
+                    'Please refresh the page and try again.'
+                )
             except (api.SubmissionError, AssessmentWorkflowError, NoTeamToCreateSubmissionForError):
                 msg = (
-                    u"An unknown error occurred while submitting "
-                    u"a response for the user: {student_item}"
+                    "An unknown error occurred while submitting "
+                    "a response for the user: {student_item}"
                 ).format(student_item=student_item_dict)
                 logger.exception(msg)
                 status_tag = 'EUNKNOWN'
-                status_text = self._(u'API returned unclassified exception.')
+                status_text = self._('API returned unclassified exception.')
 
         # error cases fall through to here
         return status, status_tag, status_text
@@ -213,11 +258,11 @@ class SubmissionMixin:
                     {"saved_response": self.saved_response}
                 )
             except Exception:  # pylint: disable=broad-except
-                return {'success': False, 'msg': self._(u"This response could not be saved.")}
+                return {'success': False, 'msg': self._("This response could not be saved.")}
             else:
-                return {'success': True, 'msg': u''}
+                return {'success': True, 'msg': ''}
         else:
-            return {'success': False, 'msg': self._(u"This response was not submitted.")}
+            return {'success': False, 'msg': self._("This response was not submitted.")}
 
     @XBlock.json_handler
     def save_files_descriptions(self, data, suffix=''):  # pylint: disable=unused-argument
@@ -233,7 +278,7 @@ class SubmissionMixin:
         Returns:
             dict: Contains a bool 'success' and unicode string 'msg'.
         """
-        failure_response = {'success': False, 'msg': self._(u"Files descriptions were not submitted.")}
+        failure_response = {'success': False, 'msg': self._("Files descriptions were not submitted.")}
 
         if 'fileMetadata' not in data:
             return failure_response
@@ -251,9 +296,9 @@ class SubmissionMixin:
 
         for new_upload in file_data:
             if not all([
-                isinstance(new_upload['description'], six.string_types),
-                isinstance(new_upload['name'], six.string_types),
-                isinstance(new_upload['size'], six.integer_types),
+                isinstance(new_upload['description'], str),
+                isinstance(new_upload['name'], str),
+                isinstance(new_upload['size'], int),
             ]):
                 return failure_response
 
@@ -266,13 +311,21 @@ class SubmissionMixin:
                 {"saved_response": self.saved_files_descriptions}
             )
         except FileUploadError as exc:
-            logger.exception(u"FileUploadError: file description for data {data} failed with error {error}".format(
-                data=data,
-                error=exc
-            ))
-            return {'success': False, 'msg': self._(u"Files metadata could not be saved.")}
-
-        return {'success': True, 'msg': u''}
+            logger.exception(
+                "FileUploadError: file description for data %s failed with error %s",
+                data,
+                exc,
+                exc_info=True,
+            )
+            return {'success': False, 'msg': self._("Files metadata could not be saved.")}
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.exception(
+                "FileUploadError: unhandled exception for data %s. Error: %s",
+                data,
+                exc,
+                exc_info=True,
+            )
+        return {'success': True, 'msg': ''}
 
     def create_team_submission(self, student_sub_data):
         """ A student submitting for a team should generate matching submissions for every member of the team. """
@@ -293,6 +346,9 @@ class SubmissionMixin:
         student_sub_dict = prepare_submission_for_serialization(student_sub_data)
 
         self._collect_files_for_submission(student_sub_dict)
+
+        self.check_for_empty_submission_and_raise_error(student_sub_dict)
+
         submitter_anonymous_user_id = self.xmodule_runtime.anonymous_student_id
         user = self.get_real_user(submitter_anonymous_user_id)
         student_item_dict = self.get_student_item_dict(anonymous_user_id=submitter_anonymous_user_id)
@@ -333,6 +389,8 @@ class SubmissionMixin:
 
         self._collect_files_for_submission(student_sub_dict)
 
+        self.check_for_empty_submission_and_raise_error(student_sub_dict)
+
         submission = api.create_submission(student_item_dict, student_sub_dict)
         self.create_workflow(submission["uuid"])
         self.submission_uuid = submission["uuid"]
@@ -352,18 +410,37 @@ class SubmissionMixin:
 
         return submission
 
+    def check_for_empty_submission_and_raise_error(self, student_sub_dict):
+        """
+        Check if student_sub_dict has any submission content so that we don't
+        create empty submissions.
+
+        If there are no text responses and no file responses, raise an EmptySubmissionError
+        """
+        has_content = False
+
+        # Does the student_sub_dict have any non-zero-length strings in 'parts'?
+        has_content |= any(part.get('text', '') for part in student_sub_dict.get('parts', []))
+
+        # Are there any file_keys in student_sub_dict?
+        has_content |= len(student_sub_dict.get('file_keys', [])) > 0
+
+        if not has_content:
+            raise EmptySubmissionError
+
     def _collect_files_for_submission(self, student_sub_dict):
         """ Collect files from CSM for individual submisisons or SharedFileUpload for team submisisons. """
 
         if not self.file_upload_type:
-            return
+            return None
 
         for field in ('file_keys', 'files_descriptions', 'files_names', 'files_sizes'):
             student_sub_dict[field] = []
 
-        uploads = self.file_manager.get_uploads()
+        team_id = None if not self.has_team() else self.team.team_id
+        uploads = self.file_manager.get_uploads(team_id=team_id)
         if self.is_team_assignment():
-            uploads += self.file_manager.get_team_uploads()
+            uploads += self.file_manager.get_team_uploads(team_id=team_id)
 
         for upload in uploads:
             student_sub_dict['file_keys'].append(upload.key)
@@ -392,33 +469,64 @@ class SubmissionMixin:
 
         """
         if 'contentType' not in data or 'filename' not in data:
-            return {'success': False, 'msg': self._(u"There was an error uploading your file.")}
-        content_type = data['contentType']
-        file_name = data['filename']
-        file_name_parts = file_name.split('.')
+            return {'success': False, 'msg': self._("There was an error uploading your file.")}
+
+        if not self.allow_multiple_files:
+
+            # Here we check if there are existing file uploads by checking for
+            # an existing download url for any of the upload slots.
+            # Note that we can't use self.saved_files_descriptions because that
+            # is populated before files are uploaded
+            for i in range(self.MAX_FILES_COUNT):
+                file_url = self._get_download_url(i)
+                if file_url:
+                    return {'success': False,
+                            'msg': self._("Only a single file upload is allowed for this assessment.")}
 
         file_num = int(data.get('filenum', 0))
 
-        file_ext = file_name_parts[-1] if len(file_name_parts) > 1 else None
-        if self.file_upload_type == 'image' and content_type not in self.ALLOWED_IMAGE_MIME_TYPES:
-            return {'success': False, 'msg': self._(u"Content type must be GIF, PNG or JPG.")}
+        _, file_ext = os.path.splitext(data['filename'])
+        file_ext = file_ext.strip('.') if file_ext else None
+        content_type = data['contentType']
 
-        if self.file_upload_type == 'pdf-and-image' and content_type not in self.ALLOWED_FILE_MIME_TYPES:
-            return {'success': False, 'msg': self._(u"Content type must be PDF, GIF, PNG or JPG.")}
+        # Validate that there are no data issues and file type is allowed
+        if not self.is_supported_upload_type(file_ext, content_type):
+            return {'success': False, 'msg': self._(
+                "File upload failed: unsupported file type."
+                "Only the supported file types can be uploaded."
+                "If you have questions, please reach out to the course team."
+            )}
 
-        if self.file_upload_type == 'custom' and file_ext.lower() not in self.white_listed_file_types:
-            return {'success': False, 'msg': self._(u"File type must be one of the following types: {}").format(
-                ', '.join(self.white_listed_file_types))}
-
-        if file_ext in self.FILE_EXT_BLACK_LIST:
-            return {'success': False, 'msg': self._(u"File type is not allowed.")}
+        # Attempt to upload
+        file_num = int(data.get('filenum', 0))
         try:
             key = self._get_student_item_key(file_num)
             url = file_upload_api.get_upload_url(key, content_type)
             return {'success': True, 'url': url}
         except FileUploadError:
-            logger.exception(u"FileUploadError:Error retrieving upload URL for the data:{data}.".format(data=data))
-            return {'success': False, 'msg': self._(u"Error retrieving upload URL.")}
+            logger.exception("FileUploadError:Error retrieving upload URL for the data: %s.", data)
+            return {'success': False, 'msg': self._("Error retrieving upload URL.")}
+
+    def is_supported_upload_type(self, file_ext, content_type):
+        """
+        Determine if the uploaded file type/extension is allowed for the configured file upload configuration
+
+        Returns:
+            True/False if file type is supported/unsupported
+        """
+        if self.file_upload_type == 'image' and content_type not in self.ALLOWED_IMAGE_MIME_TYPES:
+            return False
+
+        elif self.file_upload_type == 'pdf-and-image' and content_type not in self.ALLOWED_FILE_MIME_TYPES:
+            return False
+
+        elif self.file_upload_type == 'custom' and file_ext.lower() not in self.white_listed_file_types:
+            return False
+
+        elif file_ext in self.FILE_EXT_BLACK_LIST:
+            return False
+
+        return True
 
     @XBlock.json_handler
     def download_url(self, data, suffix=''):  # pylint: disable=unused-argument
@@ -446,13 +554,28 @@ class SubmissionMixin:
         if self._can_delete_file(filenum):
             try:
                 self.file_manager.delete_upload(filenum)
-                logger.debug("Deleted file {student_item_key}".format(student_item_key=student_item_key))
+                # Emit analytics event...
+                self.runtime.publish(
+                    self,
+                    "openassessmentblock.remove_uploaded_file",
+                    {"student_item_key": student_item_key}
+                )
+                logger.debug("Deleted file %s", student_item_key)
                 return {'success': True}
             except FileUploadError as exc:
-                logger.exception("FileUploadError: Error when deleting file {student_item_key} : {exc}".format(
-                    student_item_key=student_item_key,
-                    exc=exc
-                ))
+                logger.exception(
+                    "FileUploadError: Error when deleting file %s : %s",
+                    student_item_key,
+                    exc,
+                    exc_info=True
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.exception(
+                    "FileUploadError: unhandled exception for data %s. Error: %s",
+                    data,
+                    exc,
+                    exc_info=True,
+                )
 
         return {'success': False}
 
@@ -483,7 +606,8 @@ class SubmissionMixin:
         """
         return file_upload_api.get_student_file_key(self.get_student_item_dict(), index=num)
 
-    def _get_url_by_file_key(self, key):
+    @classmethod
+    def _get_url_by_file_key(cls, key):
         """
         Return download url for some particular file key.
 
@@ -493,14 +617,17 @@ class SubmissionMixin:
             if key:
                 url = file_upload_api.get_download_url(key)
         except FileUploadError as exc:
-            logger.exception(u"FileUploadError: Download url for file key {key} failed with error {error}".format(
-                key=key,
-                error=exc
-            ))
+            logger.exception(
+                "FileUploadError: Download url for file key %s failed with error %s",
+                key,
+                exc,
+                exc_info=True
+            )
 
         return url
 
-    def get_download_urls_from_submission(self, submission):
+    @classmethod
+    def get_download_urls_from_submission(cls, submission):
         """
         Returns a download URLs for retrieving content within a submission.
 
@@ -510,31 +637,24 @@ class SubmissionMixin:
                 with related content
 
         Returns:
-            List with URLs to related content. If there is no content related to this
-            key, or if there is no key for the submission, returns an empty
-            list.
+            List of FileDescriptor dicts for each file associated with the submission
 
         """
         urls = []
-        if 'file_keys' in submission['answer']:
-            file_keys = submission['answer'].get('file_keys', [])
-            descriptions = submission['answer'].get('files_descriptions', [])
-            file_names = submission['answer'].get('files_name', submission['answer'].get('files_names', []))
-            for idx, key in enumerate(file_keys):
-                file_download_url = self._get_url_by_file_key(key)
-                if file_download_url:
-                    file_description = descriptions[idx].strip() if idx < len(descriptions) else ''
-                    try:
-                        file_name = file_names[idx].strip() if idx < len(file_names) else ''
-                    except AttributeError:
-                        file_name = ''
-                        logger.error('descriptions[idx] is None in {}'.format(submission))
-                    urls.append((file_download_url, file_description, file_name, False))
-        elif 'file_key' in submission['answer']:
-            key = submission['answer'].get('file_key', '')
-            file_download_url = self._get_url_by_file_key(key)
+        raw_answer = submission.get('answer')
+        answer = OraSubmissionAnswerFactory.parse_submission_raw_answer(raw_answer)
+        for file_upload in answer.get_file_uploads(missing_blank=True):
+            file_download_url = cls._get_url_by_file_key(file_upload.key)
             if file_download_url:
-                urls.append((file_download_url, '', '', False))
+                urls.append(
+                    file_upload_api.FileDescriptor(
+                        download_url=file_download_url,
+                        description=file_upload.description,
+                        name=file_upload.name,
+                        size=file_upload.size,
+                        show_delete_button=False
+                    )._asdict()
+                )
         return urls
 
     def get_files_info_from_user_state(self, username):
@@ -547,13 +667,13 @@ class SubmissionMixin:
         Arguments:
             username(str): user's name whose state is being check for files information.
         Returns:
-            List of files information tuple, if present, else empty list.
+            List of FileDescriptor dicts, if present, else empty list.
         """
 
         files_info = []
         user_state = self.get_user_state(username)
         item_dict = self.get_student_item_dict_from_username_or_email(username)
-        if u'saved_files_descriptions' in user_state:
+        if 'saved_files_descriptions' in user_state:
             # pylint: disable=protected-access
             files_descriptions = file_upload_api._safe_load_json_list(
                 user_state.get('saved_files_descriptions'),
@@ -568,14 +688,23 @@ class SubmissionMixin:
                 download_url = self._get_url_by_file_key(file_key)
                 if download_url:
                     file_name = files_names[index] if index < len(files_names) else ''
-                    files_info.append((download_url, description, file_name, False))
+                    files_info.append(
+                        file_upload_api.FileDescriptor(
+                            download_url=download_url,
+                            description=description,
+                            name=file_name,
+                            size=None,
+                            show_delete_button=False
+                        )._asdict()
+                    )
                 else:
                     # If file has been removed, the URL doesn't exist
-                    logger.info("URLWorkaround: no URL for description {desc} & key {key} for user:{user}".format(
-                        desc=description,
-                        user=username,
-                        key=file_key
-                    ))
+                    logger.info(
+                        "URLWorkaround: no URL for description %s & key %s for user:%s",
+                        description,
+                        username,
+                        file_key
+                    )
                     continue
         return files_info
 
@@ -592,8 +721,7 @@ class SubmissionMixin:
         Arguments:
             username_or_email(str): username or email of the learner whose files' information is to be obtained.
         Returns:
-            List of 3-valued tuples, with first value being file URL and other two values as empty string.
-            The other 2 values have to be appended to work properly in the template.
+            List of FileDescriptor dicts
         """
         file_uploads = []
         student_item_dict = self.get_student_item_dict_from_username_or_email(username_or_email)
@@ -606,12 +734,21 @@ class SubmissionMixin:
                 pass
 
             if download_url:
-                logger.info(u"Download URL exists for key {key} in block {block} for user {user}".format(
-                    key=file_key,
-                    user=username_or_email,
-                    block=str(self.location)
-                ))
-                file_uploads.append((download_url, '', '', False))
+                logger.info(
+                    "Download URL exists for key %s in block %s for user %s",
+                    file_key,
+                    username_or_email,
+                    str(self.location)
+                )
+                file_uploads.append(
+                    file_upload_api.FileDescriptor(
+                        download_url=download_url,
+                        description='',
+                        name='',
+                        size=None,
+                        show_delete_button=False
+                    )._asdict()
+                )
             else:
                 continue
 
@@ -650,8 +787,8 @@ class SubmissionMixin:
         Returns:
             unicode
         """
-        return self._(u'This response has been saved but not submitted.') if self.has_saved else self._(
-            u'This response has not been saved.')
+        return self._('This response has been saved but not submitted.') if self.has_saved else self._(
+            'This response has not been saved.')
 
     @XBlock.handler
     def render_submission(self, data, suffix=''):  # pylint: disable=unused-argument
@@ -675,6 +812,57 @@ class SubmissionMixin:
         path, context = self.submission_path_and_context()
         return self.render_assessment(path, context_dict=context)
 
+    def get_team_submission_context(self, context):
+        """
+        Populate the passed context object with team info, including a set of students on
+        the team with submissions to the current item from another team, under the key
+        `team_members_with_external_submissions`.
+
+        Args:
+            context (dict): render context to add team submission context into
+        Returns
+            (dict): context arg with additional team-related fields
+        """
+
+        from submissions import team_api
+        try:
+            team_info = self.get_team_info()
+            if team_info:
+                context.update(team_info)
+                if self.is_course_staff:
+                    return
+                student_item_dict = self.get_student_item_dict()
+                external_submissions = team_api.get_teammates_with_submissions_from_other_teams(
+                    self.course_id,
+                    student_item_dict["item_id"],
+                    team_info["team_id"],
+                    self.get_anonymous_user_ids_for_team()
+                )
+
+                context["team_members_with_external_submissions"] = list_to_conversational_format([
+                    self.get_username(submission['student_id']) for submission in external_submissions
+                ])
+        except ObjectDoesNotExist:
+            logger.error(
+                '%s: User associated with anonymous_user_id %s can not be found.',
+                str(self.location),
+                self.get_student_item_dict()['student_id'],
+            )
+        except NoSuchServiceError:
+            logger.error('%s: Teams service is unavailable', str(self.location))
+
+    def get_allowed_file_types_or_preset(self):
+        """
+        If allowed files are not explicitly set for file uploads, use preset extensions
+        """
+        if self.white_listed_file_types:
+            return self.white_listed_file_types
+        elif self.file_upload_type == 'image':
+            return self.ALLOWED_IMAGE_EXTENSIONS
+        elif self.file_upload_type == 'pdf-and-image':
+            return self.ALLOWED_FILE_EXTENSIONS
+        return None
+
     def submission_path_and_context(self):
         """
         Determine the template path and context to use when
@@ -685,20 +873,28 @@ class SubmissionMixin:
             and `context` (dict) is the template context.
 
         """
-        workflow = self.get_workflow_info()
+        workflow = self.get_team_workflow_info() if self.teams_enabled else self.get_workflow_info()
         problem_closed, reason, start_date, due_date = self.is_closed('submission')
         user_preferences = get_user_preferences(self.runtime.service(self, 'user'))
+        course_id = self.location.course_key if hasattr(self, 'location') else None
 
         path = 'openassessmentblock/response/oa_response.html'
         context = {
-            'user_timezone': user_preferences['user_timezone'],
+            'enable_delete_files': False,
+            'file_upload_response': self.file_upload_response,
+            'has_real_user': self.has_real_user,
+            'prompts_type': self.prompts_type,
+            'show_rubric_during_response': self.show_rubric_during_response,
+            'text_response': self.text_response,
+            'text_response_editor': self.text_response_editor,
             'user_language': user_preferences['user_language'],
-            "xblock_id": self.get_xblock_id(),
-            "text_response": self.text_response,
-            "file_upload_response": self.file_upload_response,
-            "prompts_type": self.prompts_type,
-            "enable_delete_files": False,
+            'user_timezone': user_preferences['user_timezone'],
+            'xblock_id': self.get_xblock_id(),
+            'base_asset_url': self._get_base_url_path_for_course_assets(course_id)
         }
+
+        if self.show_rubric_during_response:
+            context['rubric_criteria'] = copy.deepcopy(self.rubric_criteria_with_labels)
 
         # Due dates can default to the distant future, in which case
         # there's effectively no due date.
@@ -706,16 +902,36 @@ class SubmissionMixin:
         if due_date < DISTANT_FUTURE:
             context["submission_due"] = due_date
 
+        # For team assignments, if a user submitted with a past team, that gets precidence.
+        # So we first see if they have a submission and load context from that.
+        # Otherwise, we fall back to the current team.
+        team_id_for_current_submission = None
+        if self.is_team_assignment():
+            if not workflow:
+                team_id_for_current_submission = self.get_team_info().get('team_id', None)
+            else:
+                team_submission = get_team_submission(workflow['team_submission_uuid'])
+                team_id_for_current_submission = team_submission['team_id']
+
+            # If it's a team assignment, the user hasn't submitted and is not on a team, the assignment is unavailable.
+            if team_id_for_current_submission is None:
+                path = 'openassessmentblock/response/oa_response_unavailable.html'
+                return path, context
+
         context['file_upload_type'] = self.file_upload_type
+        context['allow_multiple_files'] = self.allow_multiple_files
         context['allow_latex'] = self.allow_latex
 
         file_urls = None
 
         if self.file_upload_type:
-            context['file_urls'] = self.file_manager.file_descriptor_tuples(include_deleted=True)
-            context['team_file_urls'] = self.file_manager.team_file_descriptor_tuples()
-        if self.file_upload_type == 'custom':
-            context['white_listed_file_types'] = self.white_listed_file_types
+            context['file_urls'] = self.file_manager.file_descriptors(
+                team_id=team_id_for_current_submission, include_deleted=True
+            )
+            context['team_file_urls'] = self.file_manager.team_file_descriptors(
+                team_id=team_id_for_current_submission
+            )
+            context['white_listed_file_types'] = ['.' + ext for ext in self.get_allowed_file_types_or_preset()]
 
         if not workflow and problem_closed:
             if reason == 'due':
@@ -726,6 +942,8 @@ class SubmissionMixin:
         elif not workflow:
             # For backwards compatibility. Initially, problems had only one prompt
             # and a string answer. We convert it to the appropriate dict.
+            no_workflow_path = "openassessmentblock/response/oa_response.html"
+
             try:
                 json.loads(self.saved_response)
                 saved_response = {
@@ -742,20 +960,6 @@ class SubmissionMixin:
             context['save_status'] = self.save_status
             context['enable_delete_files'] = True
 
-            if self.teams_enabled:
-                try:
-                    team_info = self.get_team_info()
-                    if team_info:
-                        context.update(team_info)
-                except ObjectDoesNotExist:
-                    error_msg = '{}: User associated with anonymous_user_id {} can not be found.'
-                    logger.error(error_msg.format(
-                        str(self.location),
-                        self.get_student_item_dict()['student_id'],
-                    ))
-                except NoSuchServiceError:
-                    logger.error('{}: Teams service is unavailable'.format(str(self.location)))
-
             submit_enabled = True
             if self.text_response == 'required' and not self.saved_response:
                 submit_enabled = False
@@ -765,9 +969,20 @@ class SubmissionMixin:
                     and not self.saved_response and not file_urls:
                 submit_enabled = False
             context['submit_enabled'] = submit_enabled
-            path = "openassessmentblock/response/oa_response.html"
+
+            if self.teams_enabled:
+                self.get_team_submission_context(context)
+                if self.does_team_have_submission(context['team_id']):
+                    no_workflow_path = 'openassessmentblock/response/oa_response_team_already_submitted.html'
+
+            path = no_workflow_path
         elif workflow["status"] == "cancelled":
-            context["workflow_cancellation"] = self.get_workflow_cancellation_info(self.submission_uuid)
+            if self.teams_enabled:
+                context["workflow_cancellation"] = self.get_team_workflow_cancellation_info(
+                    workflow["team_submission_uuid"])
+            else:
+                context["workflow_cancellation"] = self.get_workflow_cancellation_info(
+                    self.submission_uuid)
             context["student_submission"] = self.get_user_submission(
                 workflow["submission_uuid"]
             )

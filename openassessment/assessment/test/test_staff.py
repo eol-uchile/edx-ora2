@@ -1,19 +1,18 @@
-# coding=utf-8
 """
 Tests for staff assessments.
 """
-from __future__ import absolute_import
 
 import copy
 from datetime import timedelta
+from unittest import mock
 
 from ddt import data, ddt, unpack
 from freezegun import freeze_time
-import mock
 
 from django.db import DatabaseError
 from django.utils.timezone import now
 
+from submissions import api as sub_api
 from openassessment.assessment.api import peer as peer_api
 from openassessment.assessment.api import staff as staff_api
 from openassessment.assessment.api.peer import create_assessment as peer_assess
@@ -23,7 +22,6 @@ from openassessment.assessment.models import Assessment, StaffWorkflow, TeamStaf
 from openassessment.test_utils import CacheResetTest
 from openassessment.tests.factories import StaffWorkflowFactory, TeamStaffWorkflowFactory, AssessmentFactory
 from openassessment.workflow import api as workflow_api
-from submissions import api as sub_api
 
 from .constants import OPTIONS_SELECTED_DICT, RUBRIC, RUBRIC_OPTIONS, RUBRIC_POSSIBLE_POINTS, STUDENT_ITEM
 
@@ -38,7 +36,7 @@ class TestStaffAssessment(CacheResetTest):
     STEP_REQUIREMENTS_WITH_STAFF = {'required': True}
 
     # This is due to ddt not playing nicely with list comprehensions
-    ASSESSMENT_SCORES_DDT = [key for key in OPTIONS_SELECTED_DICT]
+    ASSESSMENT_SCORES_DDT = list(OPTIONS_SELECTED_DICT)
 
     @staticmethod
     def _peer_assess(scores):
@@ -47,14 +45,14 @@ class TestStaffAssessment(CacheResetTest):
         """
         bob_sub, bob = TestStaffAssessment._create_student_and_submission("Bob", "Bob's answer", problem_steps=['peer'])
         peer_api.get_submission_to_assess(bob_sub["uuid"], 1)
-        return peer_assess(bob_sub["uuid"], bob["student_id"], scores, dict(), "", RUBRIC, 1)
+        return peer_assess(bob_sub["uuid"], bob["student_id"], scores, {}, "", RUBRIC, 1)
 
     ASSESSMENT_TYPES_DDT = [
-        ('self', lambda sub, scorer_id, scores: self_assess(sub, scorer_id, scores, dict(), "", RUBRIC)),
+        ('self', lambda sub, scorer_id, scores: self_assess(sub, scorer_id, scores, {}, "", RUBRIC)),
         ('peer', lambda sub, scorer_id, scores: TestStaffAssessment._peer_assess(scores)),
         (
             'staff',
-            lambda sub, scorer_id, scores: staff_api.create_assessment(sub, scorer_id, scores, dict(), "", RUBRIC)
+            lambda sub, scorer_id, scores: staff_api.create_assessment(sub, scorer_id, scores, {}, "", RUBRIC)
         ),
     ]
 
@@ -84,7 +82,7 @@ class TestStaffAssessment(CacheResetTest):
         assessment = staff_api.create_assessment(
             tim_sub["uuid"],
             "Dumbledore",
-            OPTIONS_SELECTED_DICT[key]["options"], dict(), "",
+            OPTIONS_SELECTED_DICT[key]["options"], {}, "",
             RUBRIC,
         )
 
@@ -115,7 +113,7 @@ class TestStaffAssessment(CacheResetTest):
         staff_assessment = staff_api.create_assessment(
             tim_sub["uuid"],
             "Dumbledore",
-            OPTIONS_SELECTED_DICT[key]["options"], dict(), "",
+            OPTIONS_SELECTED_DICT[key]["options"], {}, "",
             RUBRIC,
         )
 
@@ -145,7 +143,7 @@ class TestStaffAssessment(CacheResetTest):
         self_assessment = self_assess(
             tim_sub["uuid"],
             tim["student_id"],
-            initial_assessment["options"], dict(), "",
+            initial_assessment["options"], {}, "",
             RUBRIC,
         )
 
@@ -158,7 +156,7 @@ class TestStaffAssessment(CacheResetTest):
         staff_assessment = staff_api.create_assessment(
             tim_sub["uuid"],
             "Dumbledore",
-            OPTIONS_SELECTED_DICT[key]["options"], dict(), "",
+            OPTIONS_SELECTED_DICT[key]["options"], {}, "",
             RUBRIC,
         )
 
@@ -197,7 +195,7 @@ class TestStaffAssessment(CacheResetTest):
         staff_assessment = staff_api.create_assessment(
             tim_sub["uuid"],
             "Dumbledore",
-            OPTIONS_SELECTED_DICT[staff_score]["options"], dict(), "",
+            OPTIONS_SELECTED_DICT[staff_score]["options"], {}, "",
             RUBRIC,
         )
 
@@ -229,7 +227,7 @@ class TestStaffAssessment(CacheResetTest):
         staff_assessment = staff_api.create_assessment(
             tim_sub["uuid"],
             "Dumbledore",
-            OPTIONS_SELECTED_DICT[staff_score]['options'], dict(), "",
+            OPTIONS_SELECTED_DICT[staff_score]['options'], {}, "",
             RUBRIC,
         )
 
@@ -271,13 +269,13 @@ class TestStaffAssessment(CacheResetTest):
         staff_api.create_assessment(
             tim_sub["uuid"],
             "Dumbledore",
-            OPTIONS_SELECTED_DICT[staff_score]["options"], dict(), "",
+            OPTIONS_SELECTED_DICT[staff_score]["options"], {}, "",
             RUBRIC,
         )
         staff_api.create_assessment(
             bob_sub["uuid"],
             "Dumbledore",
-            OPTIONS_SELECTED_DICT[staff_score]["options"], dict(), "",
+            OPTIONS_SELECTED_DICT[staff_score]["options"], {}, "",
             RUBRIC,
         )
 
@@ -286,7 +284,7 @@ class TestStaffAssessment(CacheResetTest):
         peer_assess(
             bob_sub["uuid"],
             bob["student_id"],
-            OPTIONS_SELECTED_DICT["most"]["options"], dict(), "",
+            OPTIONS_SELECTED_DICT["most"]["options"], {}, "",
             RUBRIC,
             requirements["peer"]["must_be_graded_by"]
         )
@@ -311,13 +309,37 @@ class TestStaffAssessment(CacheResetTest):
         staff_api.create_assessment(
             tim_sub["uuid"],
             "Dumbledore",
-            OPTIONS_SELECTED_DICT["none"]["options"], dict(), "",
+            OPTIONS_SELECTED_DICT["none"]["options"], {}, "",
             RUBRIC,
         )
         workflow_api.get_workflow_for_submission(tim_sub["uuid"], {})
         with mock.patch('openassessment.workflow.models.sub_api.reset_score') as mock_reset:
             workflow_api.get_workflow_for_submission(tim_sub["uuid"], {})
             self.assertFalse(mock_reset.called)
+
+    def test_retrieve_bulk_workflow_status(self):
+        """
+        Test that the bulk workflow API retrieves submission information correctly.
+        """
+        # Create Bob's submission without a submission
+        bob_sub, _ = TestStaffAssessment._create_student_and_submission("Bob", "Bob's answer")
+        # Create Tim's submission with a submission
+        tim_sub, tim_item = TestStaffAssessment._create_student_and_submission("Tim", "Tim's answer")
+        staff_api.create_assessment(
+            tim_sub["uuid"],
+            "Dumbledore",
+            OPTIONS_SELECTED_DICT["none"]["options"], {}, "",
+            RUBRIC,
+        )
+
+        # Retrieve workflow status and test
+        workflow_status = staff_api.bulk_retrieve_workflow_status(
+            tim_item['course_id'],
+            tim_item['item_id'],
+            [tim_sub['uuid'], bob_sub['uuid']]
+        )
+        self.assertEqual(workflow_status[tim_sub['uuid']], "submitted")
+        self.assertEqual(workflow_status[bob_sub['uuid']], "not_submitted")
 
     def test_invalid_rubric_exception(self):
         # Create a submission
@@ -334,10 +356,10 @@ class TestStaffAssessment(CacheResetTest):
             staff_api.create_assessment(
                 tim_sub["uuid"],
                 "Dumbledore",
-                OPTIONS_SELECTED_DICT["most"]["options"], dict(), "",
+                OPTIONS_SELECTED_DICT["most"]["options"], {}, "",
                 invalid_rubric,
             )
-        self.assertEqual(str(context_manager.exception), u"The rubric definition is not valid.")
+        self.assertEqual(str(context_manager.exception), "The rubric definition is not valid.")
 
     @data("criterion_not_found", "option_not_found", "missing_criteria", "some_criteria_not_assessed")
     def test_invalid_rubric_options_exception(self, invalid_reason):
@@ -360,10 +382,10 @@ class TestStaffAssessment(CacheResetTest):
             staff_api.create_assessment(
                 tim_sub["uuid"],
                 "Dumbledore",
-                dict_to_use, dict(), "",
+                dict_to_use, {}, "",
                 RUBRIC,
             )
-        self.assertEqual(str(context_manager.exception), u"Invalid options were selected in the rubric.")
+        self.assertEqual(str(context_manager.exception), "Invalid options were selected in the rubric.")
 
     @mock.patch('openassessment.assessment.models.Assessment.objects.filter')
     def test_database_filter_error_handling(self, mock_filter):
@@ -380,7 +402,7 @@ class TestStaffAssessment(CacheResetTest):
         self.assertEqual(
             str(context_manager.exception),
             (
-                u"An error occurred while retrieving staff assessments for the submission with UUID {uuid}: {ex}"
+                "An error occurred while retrieving staff assessments for the submission with UUID {uuid}: {ex}"
             ).format(uuid=tim_sub["uuid"], ex="KABOOM!")
         )
 
@@ -389,7 +411,7 @@ class TestStaffAssessment(CacheResetTest):
             staff_api.get_assessment_scores_by_criteria(tim_sub["uuid"])
         self.assertEqual(
             str(context_manager.exception),
-            u"Error getting staff assessment scores for {}".format(tim_sub["uuid"])
+            "Error getting staff assessment scores for {}".format(tim_sub["uuid"])
         )
 
     @mock.patch('openassessment.assessment.models.Assessment.create')
@@ -401,12 +423,12 @@ class TestStaffAssessment(CacheResetTest):
             staff_api.create_assessment(
                 "000000",
                 "Dumbledore",
-                OPTIONS_SELECTED_DICT['most']['options'], dict(), "",
+                OPTIONS_SELECTED_DICT['most']['options'], {}, "",
                 RUBRIC,
             )
         self.assertEqual(
             str(context_manager.exception),
-            u"An error occurred while creating an assessment by the scorer with this ID: {}".format("Dumbledore")
+            "An error occurred while creating an assessment by the scorer with this ID: {}".format("Dumbledore")
         )
 
     def test_fetch_next_submission(self):
@@ -488,7 +510,7 @@ class TestStaffAssessment(CacheResetTest):
         staff_api.create_assessment(
             tim_to_grade["uuid"],
             tim['student_id'],
-            OPTIONS_SELECTED_DICT["all"]["options"], dict(), "",
+            OPTIONS_SELECTED_DICT["all"]["options"], {}, "",
             RUBRIC,
         )
         stats = staff_api.get_staff_grading_statistics(course_id, item_id)

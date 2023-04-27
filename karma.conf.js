@@ -1,10 +1,11 @@
 // Karma configuration
+const webpackConfig = require('./webpack.prod.config.js');
 
 module.exports = function(config) {
   config.set({
 
     // base path that will be used to resolve all patterns (eg. files, exclude)
-    basePath: 'openassessment/xblock/static/',
+    basePath: 'openassessment/xblock/static',
 
 
     plugins: [
@@ -15,7 +16,8 @@ module.exports = function(config) {
       'karma-coverage',
       'karma-sinon',
       'karma-jasmine-html-reporter',
-      'karma-spec-reporter'
+      'karma-spec-reporter',
+      'karma-webpack'
     ],
 
     // frameworks to use
@@ -30,6 +32,7 @@ module.exports = function(config) {
       'js/lib/jquery.timepicker.min.js',
       'js/lib/jquery-ui-1.10.4.min.js',
       'js/lib/underscore-min.js',
+      '../../../node_modules/@babel/polyfill/dist/polyfill.js',
       '../../../node_modules/backbone/backbone.js',
       '../../../node_modules/backgrid/lib/backgrid.min.js',
       '../../../node_modules/requirejs/require.js',
@@ -42,26 +45,20 @@ module.exports = function(config) {
         pattern: '../../../node_modules/moment/min/moment-with-locales.min.js',
         served: true, included: false
       },
-      {
-        pattern: '../../../node_modules/edx-ui-toolkit/src/js/utils/date-utils.js',
-        served: true, included: false
-      },
-      {
-        pattern: '../../../node_modules/edx-ui-toolkit/src/js/utils/string-utils.js',
-        served: true, included: false
-      },
       //
-      'js/src/oa_shared.js',
-      'js/src/*.js',
-      'js/src/lms/*.js',
-      'js/src/studio/*.js',
-      'js/spec/test_shared.js',
-      'js/spec/*.js',
-      'js/spec/lms/*.js',
-      'js/spec/studio/*.js',
+      { pattern: 'js/fixtures/*.html' },
+      { pattern: 'js/spec/*.js', watched: false },
+      { pattern: 'js/spec/**/*.js', watched: false },
+      { pattern: 'js/src/oa_shared.js', watched: false },
+      { pattern: 'js/src/*_index.js', watched: false },
+      { pattern: 'js/src/lms/editors/**/*.js', included: false},
+      { pattern: 'js/src/**/*.js', watched: false },
+      { pattern: 'js/src/**/*.jsx', watched: false },
+      { pattern: 'js/spec/**/*.jsx', watched: false },
+
       // fixtures
       {
-        pattern: 'js/fixtures/*.html',
+        pattern: 'js/fixtures/*.json',
         served: true, included: false
       }
     ],
@@ -74,11 +71,16 @@ module.exports = function(config) {
     // preprocess matching files before serving them to the browser
     // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
     preprocessors: {
-      'js/src/*.js': 'coverage',
-      'js/src/lms/*.js': 'coverage',
-      'js/src/studio/*.js': 'coverage'
+      'js/src/*_index.js': ['webpack'],
+      'js/src/**/*.js': ['webpack', 'coverage'],
+      'js/src/**/*.jsx': ['webpack', 'coverage'],
+      'js/spec/*.js': ['webpack'],
+      'js/spec/**/*.js': ['webpack'],
+      'js/src/oa_shared.js': ['webpack'],
+      'js/spec/**/*.jsx': ['webpack'],
     },
 
+    webpack: webpackConfig,
 
     // test results reporter to use
     reporters: ['spec', 'coverage'],
@@ -105,12 +107,27 @@ module.exports = function(config) {
 
     // start these browsers
     // available browser launchers: https://npmjs.org/browse/keyword/karma-launcher
-    browsers: ['PhantomJS'],
+    browsers: ['HeadlessChrome'],
+    customLaunchers: {
+        HeadlessChrome: {
+            base: 'ChromeHeadless',
+            flags: [
+                '--no-sandbox',
+                '--headless',
+                '--disable-gpu',
+                '--disable-translate',
+                '--disable-extensions'
+            ]
+        }
+    },
 
     // Continuous Integration mode
     // if true, Karma captures browsers, runs the tests and exits
-    singleRun: true
+    singleRun: true,
+
+    resolve: {
+      extensions: ['', '.js', '.jsx'],
+    }
 
   });
-
 };

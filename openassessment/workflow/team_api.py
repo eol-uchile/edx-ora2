@@ -39,45 +39,51 @@ def create_workflow(team_submission_uuid):
     """
     try:
         team_workflow = TeamAssessmentWorkflow.start_workflow(team_submission_uuid)
-        logger.info((
-            "Started team assessment workflow for "
-            "team submission UUID {uuid}"
-        ).format(uuid=team_submission_uuid))
+        logger.info(
+            "Started team assessment workflow for team submission UUID %s",
+            team_submission_uuid
+        )
         return team_workflow
-    except Exception:
+    except Exception as ex:
         err_msg = (
             "An unexpected error occurred while creating "
             "the workflow for team submission UUID {uuid}"
         ).format(uuid=team_submission_uuid)
         logger.exception(err_msg)
-        raise AssessmentWorkflowInternalError(err_msg)
+        raise AssessmentWorkflowInternalError(err_msg) from ex
 
 
 def get_workflow_for_submission(team_submission_uuid):
     """
-    Like `api.get_workflow_for_submission`, but for teams.  We don't need
-    an analogous `assessment_requirements` parameter, because team submissions
-    are only assessible by staff (where requirements like "must_grade" and
-    "must_be_graded_by" are not supported).
-
-    Raises:
-        AssessmentWorkflowInternalError on error
+    Pass through to update_from_assessments. Returns team assessment workflow information
     """
+    return update_from_assessments(team_submission_uuid)
+
+
+def update_from_assessments(team_submission_uuid, override_submitter_requirements=False):
+    """
+        Like `api.update_from_assessments`, but for teams.  We don't need
+        an analogous `assessment_requirements` parameter, because team submissions
+        are only assessible by staff (where requirements like "must_grade" and
+        "must_be_graded_by" are not supported).
+
+        Raises:
+            AssessmentWorkflowInternalError on error
+        """
     # Get the wokflow for this submission
     team_workflow = _get_workflow_model(team_submission_uuid)
 
     # Update the workflow status based on the underlying assessments
     try:
-        team_workflow.update_from_assessments()
-        logger.info((
-            "Updated workflow for team submission UUID {uuid} "
-        ).format(uuid=team_submission_uuid))
+        team_workflow.update_from_assessments(override_submitter_requirements)
+        logger.info(
+            "Updated workflow for team submission UUID %s",
+            team_submission_uuid
+        )
     except Exception as exc:
-        err_msg = (
-            "Could not update team assessment workflow: {exc}"
-        ).format(exc=exc)
-        logger.exception(err_msg)
-        raise AssessmentWorkflowInternalError(err_msg)
+        err_msg = "Could not update team assessment workflow: %s"
+        logger.exception(err_msg, exc)
+        raise AssessmentWorkflowInternalError(err_msg % exc) from exc
 
     # Return serialized workflow object
     return _serialized_with_details(team_workflow)
@@ -109,7 +115,7 @@ def _get_workflow_model(team_submission_uuid):
             "Could not get team assessment workflow with team_submission_uuid {uuid} due to error: {exc}"
         ).format(uuid=team_submission_uuid, exc=exc)
         logger.exception(err_msg)
-        raise AssessmentWorkflowInternalError(err_msg)
+        raise AssessmentWorkflowInternalError(err_msg) from exc
 
     if team_workflow is None:
         err_msg = (
@@ -188,7 +194,7 @@ def cancel_workflow(team_submission_uuid, comments, cancelled_by_id):
             "Could not cancel team assessment workflow with team_submission_uuid {uuid} due to error: {exc}"
         ).format(uuid=team_submission_uuid, exc=exc)
         logger.exception(err_msg)
-        raise AssessmentWorkflowInternalError(err_msg)
+        raise AssessmentWorkflowInternalError(err_msg) from exc
 
 
 def get_assessment_workflow_cancellation(team_submission_uuid):
@@ -201,18 +207,18 @@ def get_assessment_workflow_cancellation(team_submission_uuid):
             workflow.submission_uuid
         )
         return AssessmentWorkflowCancellationSerializer(workflow_cancellation).data if workflow_cancellation else None
-    except DatabaseError:
+    except DatabaseError as ex:
         error_message = (
             "Error finding team assessment workflow cancellation for team submission UUID {uuid}."
         ).format(uuid=team_submission_uuid)
         logger.exception(error_message)
-        raise AssessmentWorkflowInternalError(error_message)
+        raise AssessmentWorkflowInternalError(error_message) from ex
     except Exception as exc:
         err_msg = (
             "Could not get workflow cancellation with team_submission_uuid {uuid} due to error: {exc}"
         ).format(uuid=team_submission_uuid, exc=exc)
         logger.exception(err_msg)
-        raise AssessmentWorkflowInternalError(err_msg)
+        raise AssessmentWorkflowInternalError(err_msg) from exc
 
 
 def is_workflow_cancelled(team_submission_uuid):

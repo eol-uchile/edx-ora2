@@ -1,7 +1,7 @@
 """
 Generate CSV files for submission and assessment data, then upload to S3.
 """
-from __future__ import absolute_import, print_function
+
 
 import datetime
 import os
@@ -11,14 +11,10 @@ import sys
 import tarfile
 import tempfile
 
-import six
-
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-import boto
-from boto.s3.key import Key
 from openassessment.data import CsvWriter
+from openassessment.fileupload.backends.s3 import _connect_to_s3
 
 
 class Command(BaseCommand):
@@ -30,7 +26,7 @@ class Command(BaseCommand):
     args = '<COURSE_ID> <S3_BUCKET_NAME>'
 
     OUTPUT_CSV_PATHS = {
-        output_name: "{}.csv".format(output_name)
+        output_name: f"{output_name}.csv"
         for output_name in CsvWriter.MODELS
     }
 
@@ -38,8 +34,8 @@ class Command(BaseCommand):
     PROGRESS_INTERVAL = 10
 
     def __init__(self, *args, **kwargs):
-        super(Command, self).__init__(*args, **kwargs)
-        self._history = list()
+        super().__init__(*args, **kwargs)
+        self._history = []
         self._submission_counter = 0
 
     @property
@@ -66,7 +62,7 @@ class Command(BaseCommand):
 
         """
         if len(args) < 2:
-            raise CommandError(u'Usage: upload_oa_data {}'.format(self.args))
+            raise CommandError(f'Usage: upload_oa_data {self.args}')
 
         course_id, s3_bucket = args[0], args[1]
         if isinstance(course_id, bytes):
@@ -76,14 +72,14 @@ class Command(BaseCommand):
         csv_dir = tempfile.mkdtemp()
 
         try:
-            print(u"Generating CSV files for course '{}'".format(course_id))
+            print(f"Generating CSV files for course '{course_id}'")
             self._dump_to_csv(course_id, csv_dir)
-            print(u"Creating archive of CSV files in {}".format(csv_dir))
+            print(f"Creating archive of CSV files in {csv_dir}")
             archive_path = self._create_archive(csv_dir)
-            print(u"Uploading {} to {}/{}".format(archive_path, s3_bucket, course_id))
+            print(f"Uploading {archive_path} to {s3_bucket}/{course_id}")
             url = self._upload(course_id, archive_path, s3_bucket)
             print("== Upload successful ==")
-            print(u"Download URL (expires in {} hours):\n{}".format(self.URL_EXPIRATION_HOURS, url))
+            print(f"Download URL (expires in {self.URL_EXPIRATION_HOURS} hours):\n{url}")
         finally:
             # Assume that the archive was created in the directory,
             # so to clean up we just need to delete the directory.
@@ -101,8 +97,8 @@ class Command(BaseCommand):
             None
         """
         output_streams = {
-            name: open(os.path.join(csv_dir, rel_path), 'w')
-            for name, rel_path in six.iteritems(self.OUTPUT_CSV_PATHS)
+            name: open(os.path.join(csv_dir, rel_path), 'w')  # pylint: disable=consider-using-with
+            for name, rel_path in self.OUTPUT_CSV_PATHS.items()
         }
         csv_writer = CsvWriter(output_streams, self._progress_callback)
         csv_writer.write_to_csv(course_id)
@@ -118,7 +114,7 @@ class Command(BaseCommand):
             unicode: Absolute path to the archive.
 
         """
-        tarball_name = u"{}.tar.gz".format(
+        tarball_name = "{}.tar.gz".format(
             datetime.datetime.utcnow().strftime("%Y-%m-%dT%H_%M")
         )
         tarball_path = os.path.join(dir_path, tarball_name)
@@ -140,21 +136,23 @@ class Command(BaseCommand):
             str: URL to access the uploaded archive.
 
         """
-        # Try to get the AWS credentials from settings if they are available
-        # If not, these will default to `None`, and boto will try to use
-        # environment vars or configuration files instead.
-        aws_access_key_id = getattr(settings, 'AWS_ACCESS_KEY_ID', None)
-        aws_secret_access_key = getattr(settings, 'AWS_SECRET_ACCESS_KEY', None)
-        conn = boto.connect_s3(
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key
-        )
+        conn = _connect_to_s3()
 
-        bucket = conn.get_bucket(s3_bucket)
         key_name = os.path.join(course_id, os.path.split(file_path)[1])
-        key = Key(bucket=bucket, name=key_name)
-        key.set_contents_from_filename(file_path)
-        url = key.generate_url(self.URL_EXPIRATION_HOURS * 3600)
+        with open(file_path, "rb") as f:
+            conn.put_object(
+                Bucket=s3_bucket,
+                Key=key_name,
+                Body=f.read()
+            )
+        url = conn.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": s3_bucket,
+                "Key": key_name,
+            },
+            ExpiresIn=self.URL_EXPIRATION_HOURS * 3600
+        )
 
         # Store the key and url in the history
         self._history.append({'key': key_name, 'url': url})

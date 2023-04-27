@@ -2,11 +2,8 @@
 Schema for validating and sanitizing data received from the JavaScript client.
 """
 
-from __future__ import absolute_import
-
 import dateutil
 from pytz import utc
-import six
 
 from voluptuous import (
     All,
@@ -18,6 +15,7 @@ from voluptuous import (
     Required,
     Schema,
 )
+from openassessment.xblock.editor_config import AVAILABLE_EDITORS
 
 
 def utf8_validator(value):
@@ -37,9 +35,9 @@ def utf8_validator(value):
     try:
         if isinstance(value, bytes):
             return value.decode('utf-8')
-        return six.text_type(value)
-    except (ValueError, TypeError):
-        raise Invalid(u"Could not load unicode from value \"{val}\"".format(val=value))
+        return str(value)
+    except (ValueError, TypeError) as ex:
+        raise Invalid(f"Could not load unicode from value \"{value}\"") from ex
 
 
 def datetime_validator(value):
@@ -59,39 +57,41 @@ def datetime_validator(value):
         # The dateutil parser defaults empty values to the current day,
         # which is NOT what we want.
         if value is None or value == '':
-            raise Invalid(u"Datetime value cannot be \"{val}\"".format(val=value))
+            raise Invalid(f"Datetime value cannot be \"{value}\"")
 
         # Parse the date and interpret it as UTC
         value = dateutil.parser.parse(value).replace(tzinfo=utc)
-        return six.text_type(value.isoformat())
-    except (ValueError, TypeError):
-        raise Invalid(u"Could not parse datetime from value \"{val}\"".format(val=value))
+        return str(value.isoformat())
+    except (ValueError, TypeError) as ex:
+        raise Invalid(f"Could not parse datetime from value \"{value}\"") from ex
 
 
 PROMPTS_TYPES = [
-    u'text',
-    u'html',
+    'text',
+    'html',
 ]
 
 
 NECESSITY_OPTIONS = [
-    u'required',
-    u'optional',
-    u''
+    'required',
+    'optional',
+    ''
 ]
 
+# Build editor options from AVAILABLE_EDITORS
+AVAILABLE_EDITOR_OPTIONS = set(AVAILABLE_EDITORS.keys())
 
 VALID_ASSESSMENT_TYPES = [
-    u'peer-assessment',
-    u'self-assessment',
-    u'student-training',
-    u'staff-assessment',
+    'peer-assessment',
+    'self-assessment',
+    'student-training',
+    'staff-assessment',
 ]
 
 VALID_UPLOAD_FILE_TYPES = [
-    u'image',
-    u'pdf-and-image',
-    u'custom'
+    'image',
+    'pdf-and-image',
+    'custom'
 ]
 
 # Schema definition for an update from the Studio JavaScript editor.
@@ -108,10 +108,12 @@ EDITOR_UPDATE_SCHEMA = Schema({
     Required('submission_start'): Any(datetime_validator, None),
     Required('submission_due'): Any(datetime_validator, None),
     Required('text_response', default='required'): Any(All(utf8_validator, In(NECESSITY_OPTIONS)), None),
+    Required('text_response_editor', default='text'): Any(All(utf8_validator, In(AVAILABLE_EDITOR_OPTIONS)), None),
     Required('file_upload_response', default=None): Any(All(utf8_validator, In(NECESSITY_OPTIONS)), None),
     'allow_file_upload': bool,  # Backwards compatibility.
     Required('file_upload_type', default=None): Any(All(utf8_validator, In(VALID_UPLOAD_FILE_TYPES)), None),
     'white_listed_file_types': utf8_validator,
+    Required('allow_multiple_files'): bool,
     Required('allow_latex'): bool,
     Required('leaderboard_show'): int,
     Optional('teams_enabled'): bool,
@@ -124,6 +126,7 @@ EDITOR_UPDATE_SCHEMA = Schema({
             'required': bool,
             'must_grade': All(int, Range(min=0)),
             'must_be_graded_by': All(int, Range(min=0)),
+            Required('enable_flexible_grading', default=False): bool,
             'examples': [
                 Schema({
                     Required('answer'): [utf8_validator],
@@ -141,7 +144,7 @@ EDITOR_UPDATE_SCHEMA = Schema({
     Required('editor_assessments_order'): [
         All(utf8_validator, In(VALID_ASSESSMENT_TYPES))
     ],
-    Required('feedbackprompt', default=u""): utf8_validator,
+    Required('feedbackprompt', default=""): utf8_validator,
     Required('criteria'): [
         Schema({
             Required('order_num'): All(int, Range(min=0)),
@@ -166,5 +169,6 @@ EDITOR_UPDATE_SCHEMA = Schema({
                 })
             ]
         })
-    ]
+    ],
+    Required('show_rubric_during_response', default=False): bool,
 })

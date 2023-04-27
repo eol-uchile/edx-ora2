@@ -3,8 +3,6 @@ The Peer Assessment Mixin for all Peer Functionality.
 
 """
 
-from __future__ import absolute_import
-
 import logging
 
 from webob import Response
@@ -66,10 +64,9 @@ class PeerAssessmentMixin:
         uuid_server, uuid_client = self._get_server_and_client_submission_uuids(data)
         if uuid_server != uuid_client:
             logger.warning(
-                u'Irrelevant assessment submission: expected "{uuid_server}", got "{uuid_client}"'.format(
-                    uuid_server=uuid_server,
-                    uuid_client=uuid_client,
-                )
+                'Irrelevant assessment submission: expected "%s", got "%s"',
+                uuid_server,
+                uuid_client,
             )
             return {
                 'success': False,
@@ -95,13 +92,15 @@ class PeerAssessmentMixin:
 
             except (PeerAssessmentRequestError, PeerAssessmentWorkflowError):
                 logger.warning(
-                    u"Peer API error for submission UUID {}".format(self.submission_uuid),
+                    "Peer API error for submission UUID %s",
+                    self.submission_uuid,
                     exc_info=True
                 )
-                return {'success': False, 'msg': self._(u"Your peer assessment could not be submitted.")}
+                return {'success': False, 'msg': self._("Your peer assessment could not be submitted.")}
             except PeerAssessmentInternalError:
                 logger.exception(
-                    u"Peer API internal error for submission UUID: {}".format(self.submission_uuid)
+                    "Peer API internal error for submission UUID: %s",
+                    self.submission_uuid
                 )
                 msg = self._("Your peer assessment could not be submitted.")
                 return {'success': False, 'msg': msg}
@@ -114,8 +113,9 @@ class PeerAssessmentMixin:
                 self.update_workflow_status()
             except AssessmentWorkflowError:
                 logger.exception(
-                    u"Workflow error occurred when submitting peer assessment "
-                    u"for submission {}".format(self.submission_uuid)
+                    "Workflow error occurred when submitting peer assessment "
+                    "for submission %s",
+                    self.submission_uuid
                 )
                 msg = self._('Could not update workflow status.')
                 return {'success': False, 'msg': msg}
@@ -123,7 +123,7 @@ class PeerAssessmentMixin:
             # Temp kludge until we fix JSON serialization for datetime
             assessment["scored_at"] = str(assessment["scored_at"])
 
-            return {'success': True, 'msg': u''}
+            return {'success': True, 'msg': ''}
 
         return {'success': False, 'msg': self._('Could not load peer assessment.')}
 
@@ -142,7 +142,7 @@ class PeerAssessmentMixin:
 
         """
         if "peer-assessment" not in self.assessment_steps:
-            return Response(u"")
+            return Response("")
         continue_grading = data.params.get('continue_grading', False)
         path, context_dict = self.peer_path_and_context(continue_grading)
 
@@ -173,6 +173,7 @@ class PeerAssessmentMixin:
 
         context_dict = {
             "rubric_criteria": self.rubric_criteria_with_labels,
+            "allow_multiple_files": self.allow_multiple_files,
             "allow_latex": self.allow_latex,
             "prompts_type": self.prompts_type,
             "user_timezone": user_preferences['user_timezone'],
@@ -195,6 +196,7 @@ class PeerAssessmentMixin:
         workflow = self.get_workflow_info()
         workflow_status = workflow.get('status')
         peer_complete = workflow.get('status_details', {}).get('peer', {}).get('complete', False)
+        peer_skipped = workflow.get('status_details', {}).get('peer', {}).get('skipped', False)
         continue_grading = continue_grading and peer_complete
 
         student_item = self.get_student_item_dict()
@@ -218,7 +220,7 @@ class PeerAssessmentMixin:
                 )
             else:
                 context_dict["submit_button_text"] = self._(
-                    u"Submit your assessment and move to response #{response_number}"
+                    "Submit your assessment and move to response #{response_number}"
                 ).format(response_number=(count + 2))
 
         if workflow_status == "cancelled":
@@ -248,7 +250,7 @@ class PeerAssessmentMixin:
         elif reason == 'start' and problem_closed:
             context_dict["peer_start"] = start_date
             path = 'openassessmentblock/peer/oa_peer_unavailable.html'
-        elif workflow.get("status") == "peer":
+        elif workflow.get("status") == "peer" or peer_skipped:
             peer_sub = self.get_peer_submission(student_item, assessment)
             if peer_sub:
                 path = 'openassessmentblock/peer/oa_peer_assessment.html'

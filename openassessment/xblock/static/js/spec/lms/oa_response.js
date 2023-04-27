@@ -1,3 +1,7 @@
+/* eslint-disable */
+import BaseView from 'lms/oa_base';
+import ResponseView from 'lms/oa_response';
+
 /**
 Tests for OpenAssessment response (submission) view.
 **/
@@ -23,7 +27,10 @@ describe("OpenAssessment.ResponseView", function() {
     var FILE_TYPE_WHITE_LIST = ['pdf', 'doc', 'docx', 'html'];
     var FILE_EXT_BLACK_LIST = ['exe', 'msi', 'app', 'dmg'];
     var MAXIMUM_FILE_UPLOAD_COUNT = 20;
-    var COURSE_ID = 'course_id'
+    var COURSE_ID = 'course_id';
+
+    var BAD_FILETYPE_MESSAGE = 'File upload failed: unsupported file type. ' +
+        'Only the supported file types can be uploaded. If you have questions, please reach out to the course team.';
 
     var StubServer = function() {
 
@@ -78,7 +85,7 @@ describe("OpenAssessment.ResponseView", function() {
                 return successPromiseWithResult(this.listTeamsResult)
             };
         }
-        
+
         this.teamDetailError = false
         this.teamDetailResult = {
             id: 'TeamId',
@@ -98,7 +105,7 @@ describe("OpenAssessment.ResponseView", function() {
 
         this.getUsernameError = false
         this.getUsername = function() {
-            return this.getUsernameError ? errorPromise : successPromiseWithResult('this-is-my-username') 
+            return this.getUsernameError ? errorPromise : successPromiseWithResult('this-is-my-username')
         }
     };
 
@@ -145,7 +152,13 @@ describe("OpenAssessment.ResponseView", function() {
         stubConfirm = didConfirm;
     };
 
-    beforeEach(function() {
+    // Store window URL object for replacing after tests;
+    const windowURL = window.URL;
+    const mockURL = {
+      createObjectURL: () => 'url',
+    };
+
+    beforeEach(function(done) {
         // Load the DOM fixture
         loadFixtures('oa_response.html');
 
@@ -161,36 +174,48 @@ describe("OpenAssessment.ResponseView", function() {
             "MAXIMUM_FILE_UPLOAD_COUNT": MAXIMUM_FILE_UPLOAD_COUNT,
             "COURSE_ID": COURSE_ID,
             "TEAM_ASSIGNMENT": true,
+            "TEXT_RESPONSE_EDITOR": 'text',
+            "AVAILABLE_EDITORS": {
+                'text': {
+                    'js': ['/base/js/src/lms/editors/oa_editor_textarea.js']
+                }
+            }
         };
 
         // Create and install the view
-        var responseElement = $('.step--response').get(0);
-        var baseView = new OpenAssessment.BaseView(runtime, responseElement, server, {});
-        view = new OpenAssessment.ResponseView(responseElement, server, fileUploader, baseView, data);
-        view.installHandlers();
+        var rootElement = $('.step--response').parent().get(0);
+        var baseView = new BaseView(runtime, rootElement, server, data);
+        view = new ResponseView(rootElement, server, fileUploader, baseView.responseEditorLoader, baseView, data);
+        view.loadResponseEditor().then(editorCtrl => {
+            view.responseEditorController = editorCtrl
+            view.installHandlers()
 
-        // Stub the confirmation step
-        // By default, we simulate the user confirming the submission.
-        // To instead simulate the user cancelling the submission,
-        // set `stubConfirm` to false.
-        setStubConfirm(true);
-        fakeConfirm = function() {
-            return $.Deferred(function(defer) {
-                if (stubConfirm) { defer.resolve(); }
-                else { defer.reject(); }
-            });
-        };
-        spyOn(view, 'confirmSubmission').and.callFake(fakeConfirm);
-        spyOn(view, 'confirmRemoveUploadedFile').and.callFake(fakeConfirm);
-        spyOn(view, 'saveFilesDescriptions').and.callFake(function() {
-            for (var i=0; i < this.filesDescriptions.length; i++) {
-                this.fileNames.push(this.files[i].name);
+            // Stub the confirmation step
+            // By default, we simulate the user confirming the submission.
+            // To instead simulate the user cancelling the submission,
+            // set `stubConfirm` to false.
+            setStubConfirm(true);
+            const fakeConfirm = function(_0, _1, confirmCallback, cancelCallback) {
+                if (stubConfirm) {
+                    confirmCallback();
+                } else {
+                    cancelCallback();
+                }
             }
-            return $.Deferred(function(defer) {
-                view.removeFilesDescriptions();
-                defer.resolve();
+            spyOn(view.confirmationDialog, 'confirm').and.callFake(fakeConfirm);
+            spyOn(view, 'saveFilesDescriptions').and.callFake(function() {
+                for (var i=0; i < this.filesDescriptions.length; i++) {
+                    this.fileNames.push(this.files[i].name);
+                }
+                return $.Deferred(function(defer) {
+                    view.removeFilesDescriptions();
+                    defer.resolve();
+                });
             });
-        });
+            window.URL = mockURL;
+
+            done()
+        })
     });
 
     afterEach(function() {
@@ -198,7 +223,9 @@ describe("OpenAssessment.ResponseView", function() {
         view.setAutoSaveEnabled(false);
 
         // Disable the unsaved page warning (if set)
-        OpenAssessment.clearUnsavedChanges();
+        view.baseView.clearUnsavedChanges();
+
+        window.URL = windowURL;
     });
 
     it("updates and retrieves response text correctly", function() {
@@ -331,7 +358,7 @@ describe("OpenAssessment.ResponseView", function() {
     it("submits a response to the server", function() {
         spyOn(server, 'submit').and.callThrough();
         view.response(['Test response 1', 'Test response 2']);
-        view.submit();
+        view.handleSubmitClicked();
         expect(server.submit).toHaveBeenCalledWith(['Test response 1', 'Test response 2']);
     });
 
@@ -342,7 +369,7 @@ describe("OpenAssessment.ResponseView", function() {
 
         // Start a submission
         view.response(['Test response 1', 'Test response 2']);
-        view.submit();
+        view.handleSubmitClicked();
 
         // Expect that the submission was not sent to the server
         expect(server.submit).not.toHaveBeenCalled();
@@ -356,7 +383,7 @@ describe("OpenAssessment.ResponseView", function() {
         });
 
         view.response(['Test response 1', 'Test response 2']);
-        view.submit();
+        view.handleSubmitClicked();
         expect(view.submitEnabled()).toBe(false);
     });
 
@@ -369,7 +396,7 @@ describe("OpenAssessment.ResponseView", function() {
         });
 
         view.response(['Test response 1', 'Test response 2']);
-        view.submit();
+        view.handleSubmitClicked();
 
         // Expect the submit button to have been re-enabled
         expect(view.submitEnabled()).toBe(true);
@@ -382,7 +409,7 @@ describe("OpenAssessment.ResponseView", function() {
 
         // Start a submission
         view.response(['Test response 1', 'Test response 2']);
-        view.submit();
+        view.handleSubmitClicked();
 
         // Expect the submit button to be re-enabled
         expect(view.submitEnabled()).toBe(true);
@@ -399,7 +426,7 @@ describe("OpenAssessment.ResponseView", function() {
         spyOn(view.baseView, 'loadAssessmentModules');
 
         view.response(['Test response 1', 'Test response 2']);
-        view.submit();
+        view.handleSubmitClicked();
 
         // Expect the current and next step to have been reloaded
         expect(view.load).toHaveBeenCalled();
@@ -436,7 +463,7 @@ describe("OpenAssessment.ResponseView", function() {
         expect(view.baseView.unsavedWarningEnabled()).toBe(true);
 
         // Submit the response and expect the unsaved warning to be disabled
-        view.submit();
+        view.handleSubmitClicked();
         expect(view.baseView.unsavedWarningEnabled()).toBe(false);
     });
 
@@ -554,7 +581,7 @@ describe("OpenAssessment.ResponseView", function() {
         var files = [{type: 'image/jpg', size: 1024, name: 'picture.exe', data: ''}];
         view.prepareUpload(files, 'image');
         expect(view.baseView.toggleActionError).toHaveBeenCalledWith(
-            'upload', 'You can upload files with these file types: JPG, PNG or GIF'
+            'upload', BAD_FILETYPE_MESSAGE
         );
     });
 
@@ -563,7 +590,7 @@ describe("OpenAssessment.ResponseView", function() {
         var files = [{type: 'application/exe', size: 1024, name: 'application.exe', data: ''}];
         view.prepareUpload(files, 'pdf-and-image');
         expect(view.baseView.toggleActionError).toHaveBeenCalledWith(
-            'upload', 'You can upload files with these file types: JPG, PNG, GIF or PDF'
+            'upload', BAD_FILETYPE_MESSAGE
         );
     });
 
@@ -572,7 +599,7 @@ describe("OpenAssessment.ResponseView", function() {
         var files = [{type: 'application/exe', size: 1024, name: 'application.exe', data: ''}];
         view.prepareUpload(files, 'custom');
         expect(view.baseView.toggleActionError).toHaveBeenCalledWith(
-            'upload', 'You can upload files with these file types: pdf, doc, docx, html'
+            'upload', BAD_FILETYPE_MESSAGE
         );
     });
 
@@ -582,7 +609,7 @@ describe("OpenAssessment.ResponseView", function() {
         var files = [{type: 'application/exe', size: 1024, name: 'application.exe', data: ''}];
         view.prepareUpload(files, 'custom');
         expect(view.baseView.toggleActionError).toHaveBeenCalledWith('upload',
-            'File type is not allowed.');
+            BAD_FILETYPE_MESSAGE);
     });
 
     it("selects one small and one large file", function() {
@@ -601,7 +628,7 @@ describe("OpenAssessment.ResponseView", function() {
                      {type: 'image/jpeg', size: 1024, name: 'small-picture-2.jpg', data: ''}];
         view.prepareUpload(files, 'image');
         expect(view.baseView.toggleActionError).toHaveBeenCalledWith('upload',
-            'You can upload files with these file types: JPG, PNG or GIF');
+            BAD_FILETYPE_MESSAGE);
     });
 
     it("uploads an image using a one-time URL", function() {
@@ -665,7 +692,7 @@ describe("OpenAssessment.ResponseView", function() {
         }
         view.prepareUpload(files2, 'image', ['i1', 'i2']);
         expect(view.baseView.toggleActionError).toHaveBeenCalledWith(
-            'upload', 'Only ' + view.data.MAXIMUM_FILE_UPLOAD_COUNT +' files can be saved.');
+            'upload', 'The maximum number files that can be saved is ' + view.data.MAXIMUM_FILE_UPLOAD_COUNT);
     });
 
     it("tests that file upload works after file delete", function() {
@@ -832,7 +859,8 @@ describe("OpenAssessment.ResponseView", function() {
 
          expect(view.hasAllUploadFiles()).toEqual(false);
          expect(view.baseView.toggleActionError).toHaveBeenCalledWith('upload',
-            "Your file " + file[0].name + " has been deleted or path has been changed.");
+            'Your file has been deleted or path has been changed: ' + file[0].name
+        );
      });
 
     it("prevents user from uploading or submitting responses when file descriptions are missing", function() {
@@ -866,10 +894,12 @@ describe("OpenAssessment.ResponseView", function() {
         $(firstDescriptionField1).val('test1');
         $(firstDescriptionField2).val('test2');
 
-        // user finishes adding descriptions which enables submit button
+        // user finishes adding descriptions which enables the upload button
         view.checkSubmissionAbility(true);
-        expect(view.submitEnabled()).toBe(true);
         expect(view.uploadEnabled()).toBe(true);
+
+        // the submit button remains disabled until files are uploaded
+        expect(view.submitEnabled()).toBe(false);
     });
 
     it("deleting all uploaded files prevents user from submitting", function() {

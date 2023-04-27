@@ -27,6 +27,15 @@
 // Developer styles for Staff Section
 // --------------------
 
+
+.ora-confirmation-alert{
+  @include confirm-jquery-ui;
+}
+
+.no-close .ui-dialog-titlebar-close {
+  display: none;
+}
+
 .wrapper--openassessment .wrapper--staff-area {
   width: 100%;
   overflow: auto;
@@ -41,7 +50,8 @@
 
     .ui-staff__button {
       @extend %btn-reset;
-
+      display: inline-block;
+      margin-top: $baseline-v/2;
       padding: ($baseline-v/4) ($baseline-v/2);
       font-size: 12px;
       border-radius: ($baseline-v/4);
@@ -61,6 +71,16 @@
       &:hover {
         color: white;
         background-color: $action-primary-color;
+      }
+    }
+
+    .button-enhanced-staff-grader-demo {
+      $primary-500: #0A3055;
+      color: white;
+      background-color: $primary-500; // paragon primary-500
+
+      &:hover {
+        background-color: darken($primary-500, 7.5%);
       }
     }
   }
@@ -268,21 +288,36 @@
 
     .editor_tabs {
 
-      width: 35%;
-      min-width: 190px;
-      max-width: 360px;
-      @include float(right);
+      display: flex;
+      justify-content: flex-end;
 
       .oa_editor_tab {
-        @include float(right);
-        padding: 0;
-        width: 29%;
-        margin: 0px 2%;
+        padding: 0 10px;
+        margin: 0px 1%;
         height: 35px;
         @include border-radius(5px);
         box-shadow: none;
         border: 0;
         @include text-align(center);
+
+        /* For an invalid tab, drop a validation error icon in the button */
+        span.validation-warning {
+          display: none;
+          padding-right: 4px;
+
+          svg {
+            width: 1em;
+            vertical-align: middle;
+            stroke: $edx-gray-d3;
+            fill: $warning-fill;
+            paint-order: stroke;
+
+            path:nth-child(2) {
+              stroke: $warning-fill;
+              fill: $edx-gray-d3;
+            }
+          }
+        }
 
         a {
           @include padding(8px, 0, 0, 0);
@@ -292,6 +327,7 @@
         }
       }
 
+      /* Inactive tab styling */
       .ui-state-default.oa_editor_tab{
         background: #e5e5e5 none;
         a {
@@ -299,6 +335,7 @@
         }
       }
 
+      /* Active tab styling */
       .ui-state-active.ui-state-default.oa_editor_tab:hover,
       .ui-state-active.oa_editor_tab {
         background: $edx-gray-d2 none;
@@ -317,8 +354,8 @@
     width: 100%;
     @include border-top-left-radius(2px);
     @include border-top-right-radius(2px);
-    background-color: #323232;
-    border-bottom: 3px solid rgb(192, 172, 0);
+    background-color: $gray-800;
+    border-bottom: 3px solid $warning-fill;
     padding: 10px;
     position: absolute;
     z-index: 10;
@@ -326,20 +363,13 @@
 
     .openassessment_alert_icon{
       position: absolute;
-      top: 35%;
-      font-size: 200%;
       @include left(3%);
+
+      svg {
+        width: 3em;
+      }
     }
 
-    .openassessment_alert_icon:before{
-      font-family: FontAwesome;
-      content: "\f071";
-      display: inline-block;
-      color: rgb(192, 172, 0);
-      @include float(left);
-      height: 0;
-      width: 0;
-    }
     .openassessment_alert_header {
       width: 85%;
       @include margin(0, 5%, 0, 10%);
@@ -351,7 +381,7 @@
 
       .openassessment_alert_message {
         font-size: 80%;
-        color: darkgray;
+        color: $light-700;
       }
     }
 
@@ -359,9 +389,10 @@
     .openassessment_alert_close {
       display: inline-block;
       position: absolute;
-      top: 0px;
+      top: 14px;
       @include right(0px);
       color: #e9e9e9;
+      font-size: 1.5em;
       @include text-align(center);
       margin: 5px 10px;
 
@@ -434,7 +465,7 @@
   }
 
   .openassessment_assessment_module_settings_editor{
-    @include padding(0, 15px, 0, 0);
+    @include padding(0, 15px, 10px, 0);
     margin: 10px;
     border: 1px solid $edx-gray-l3;
     @include border-radius(3px);
@@ -465,7 +496,16 @@
       font-size: 75%;
       margin: 0;
     }
+    .openassessment_view_details {
+      @include padding(5px, 15px, 0, 15px);
+      font-size: 75%;
+      margin: 0;
 
+      a {
+        color: #009fe6;
+        border-bottom: 1px dotted;
+      }
+    }
   }
 
   .openassessment_assessment_module_settings_editor.ui-sortable-helper{
@@ -488,20 +528,16 @@
   }
 
   .openassessment_inclusion_wrapper{
-    background-color: $edx-gray-t1;
     margin: 0;
-    @include padding(7px, 5px, 7px, 13px);
+    @include padding(15px, 5px, 5px, 8px);
     @include border-top-left-radius(2px);
     @include border-top-right-radius(2px);
 
     label{
+      font-size: 19px;
       cursor: pointer;
-      @include margin-left(($baseline-h/4));
+      @include margin-left(($baseline-h/2));
     }
-  }
-
-  .openassessment_inclusion_wrapper:hover{
-    background-color: $edx-gray-t2;
   }
 
   label{
@@ -652,6 +688,94 @@
     .wrapper-comp-settings{
       display: block;
     }
+
+    // Rubric cloning section
+    #openassessment_rubric_clone {
+      @include rubric-reuse-jquery-ui;    
+      .ui-accordion-header {
+        padding: 5px;
+        font-weight: 500;
+        font-size: 18px;
+        line-height: 28px;
+
+        #rubric-reuse-collapse-icon::after {
+          @include float(right);
+          font-family: FontAwesome;
+          display: inline-block;
+          color: inherit;
+          padding: 0 5px;
+          content: "\f067";
+        }
+      }
+
+      .ui-accordion-header-active #rubric-reuse-collapse-icon::after {
+        content: "\f068";
+      }
+
+      .ui-accordion-header-icon {
+        display: none
+      }
+
+      .openassessment_rubric_clone_block{
+        padding: 8px 0px;
+        .no-select{
+          user-select: none
+        }
+      }
+
+      .ui-accordion-content {
+        overflow: visible;
+        
+        #openassessment_rubric_clone_form_container {
+          display: flex;
+
+          #openassessment_rubric_clone_input_container {
+            flex: 9;
+
+            #openassessment_rubric_clone_input {
+              padding: 6px;
+              width: 90%;
+              height: 40px;
+              vertical-align: middle;
+            }
+
+            .openassessment_clone_combobox {
+              position: relative;
+              display: inline-block;
+            }
+
+            .openassessment_clone_combobox_toggle {
+              vertical-align: middle;
+              font-family: FontAwesome;
+              margin-left: -1px;
+              padding: 6px;
+              height: 40px;
+
+              span {
+                padding: 0;
+              }
+            }
+          }
+          #openassessment_rubric_clone_button_container {
+            flex: 3;
+            
+            #openassessment_rubric_clone_button {
+              margin-top: 0;
+              float: left;
+            }
+          }
+        }
+
+        #openassessment_rubric_clone_alert {
+          background: #BBE6D7;
+          border: 1px solid #175B3C;
+          box-sizing: border-box;
+          width: 100%;
+          padding: 10px;
+          margin: 5px 0;
+        }
+      }
+    } 
 
     .openassessment_criterion {
 
@@ -874,6 +998,27 @@
     }
   }
 
+  #oa_schedule_editor_wrapper {
+    .openassessment_schedule_setting_header {
+      font-size: 19px;
+      @include margin(15px, 0, 10px, 30px);
+    }
+
+    li {
+      &:nth-child(2) {
+        border-bottom: 1px solid #e5e5e5;
+      }
+    }
+
+    #peer_assessment_schedule_editor
+    #self_assessment_schedule_editor {
+      li {
+        &:nth-child(2) {
+          border-bottom: 1px solid #e5e5e5;
+        }
+      }
+    }
+  }
 
   hr{
     background-color: transparent;
@@ -1093,11 +1238,54 @@
 
   #team_concurrency_notice {
     margin: ($baseline-v/2) 0;
+    border: 1px solid $color-warning;
+    background-color: $color-warning-back;
+    padding: $baseline-v;
+  }
+
+  #team_user_has_previous_submission {
+    margin: ($baseline-v/2) 0;
     border: 1px solid $color-error;
     background-color: $color-error-back;
     color: $color-error;
     padding: $baseline-v;
   }
+
+    // assessment form
+    .step__rubric {
+        padding: ($baseline-v/2) ($baseline-h/4) 0 ($baseline-h/4);
+        background: $color-decorative-quaternary;
+        border-radius: ($baseline-v/10);
+
+        #read-only-rubric-button{
+            @extend %icon-1;
+            display: inline-block;
+            vertical-align: middle;
+        }
+
+        #read_only___assessment__rubric__header{
+            @extend %t-heading;
+            @include margin-left(($baseline-h/4));
+            white-space: pre-wrap;
+            display: inline; 
+        }
+
+        // fields
+        .assessment__fields {
+          margin-bottom: $baseline-v;
+        }
+    
+        // rubric question
+        .assessment__rubric__question {
+          @extend %ui-rubric-question;
+        }
+    
+        // rubric options
+        .question__answers {
+          @extend %ui-rubric-answers;
+          overflow: visible; // needed for ui-hints
+        }
+      }
 }
 .self-assessment__display__header
 .self-assessment__display__title,

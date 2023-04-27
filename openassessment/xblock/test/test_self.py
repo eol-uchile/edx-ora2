@@ -1,16 +1,14 @@
-# -*- coding: utf-8 -*-
 """
 Tests for self assessment handlers in Open Assessment XBlock.
 """
-from __future__ import absolute_import
+
 
 import copy
 import datetime
 import json
 
-import mock
+from unittest import mock
 import pytz
-import six
 
 from openassessment.assessment.api import self as self_api
 from openassessment.workflow import api as workflow_api
@@ -26,10 +24,10 @@ class TestSelfAssessment(XBlockHandlerTestCase):
 
     maxDiff = None
 
-    SUBMISSION = (u'ՇﻉรՇ', u'รપ๒๓ٱรรٱѻก')
+    SUBMISSION = ('ՇﻉรՇ', 'รપ๒๓ٱรรٱѻก')
 
     ASSESSMENT = {
-        'options_selected': {u'𝓒𝓸𝓷𝓬𝓲𝓼𝓮': u'ﻉซƈﻉɭɭﻉกՇ', u'Form': u'Fair'},
+        'options_selected': {'𝓒𝓸𝓷𝓬𝓲𝓼𝓮': 'ﻉซƈﻉɭɭﻉกՇ', 'Form': 'Fair'},
         'criterion_feedback': {},
         'overall_feedback': ""
     }
@@ -52,17 +50,17 @@ class TestSelfAssessment(XBlockHandlerTestCase):
         self.assertEqual(assessment['points_possible'], 6)
         self.assertEqual(assessment['scorer_id'], 'Bob')
         self.assertEqual(assessment['score_type'], 'SE')
-        self.assertEqual(assessment['feedback'], u'')
+        self.assertEqual(assessment['feedback'], '')
 
         self.assert_assessment_event_published(xblock, 'openassessmentblock.self_assess', assessment)
 
         parts = assessment['parts']
         parts.sort(key=lambda x: x['option']['name'])
         self.assertEqual(len(parts), 2)
-        self.assertEqual(parts[0]['option']['criterion']['name'], u'Form')
+        self.assertEqual(parts[0]['option']['criterion']['name'], 'Form')
         self.assertEqual(parts[0]['option']['name'], 'Fair')
-        self.assertEqual(parts[1]['option']['criterion']['name'], u'𝓒𝓸𝓷𝓬𝓲𝓼𝓮')
-        self.assertEqual(parts[1]['option']['name'], u'ﻉซƈﻉɭɭﻉกՇ')
+        self.assertEqual(parts[1]['option']['criterion']['name'], '𝓒𝓸𝓷𝓬𝓲𝓼𝓮')
+        self.assertEqual(parts[1]['option']['name'], 'ﻉซƈﻉɭɭﻉกՇ')
 
     @scenario('data/self_assessment_scenario.xml', user_id='Bob')
     def test_self_assess_no_submission(self, xblock):
@@ -86,7 +84,7 @@ class TestSelfAssessment(XBlockHandlerTestCase):
             # Verify that the workflow is updated when we submit a self-assessment
             self.assertTrue(resp['success'])
             expected_reqs = {
-                "peer": {"must_grade": 5, "must_be_graded_by": 3}
+                "peer": {"must_grade": 5, "must_be_graded_by": 3, "enable_flexible_grading": False}
             }
             mock_api.update_from_assessments.assert_called_once_with(submission['uuid'], expected_reqs)
 
@@ -98,12 +96,12 @@ class TestSelfAssessment(XBlockHandlerTestCase):
 
         # Submit a self assessment for a rubric with a feedback-only criterion
         assessment_dict = {
-            'options_selected': {u'vocabulary': u'good'},
+            'options_selected': {'vocabulary': 'good'},
             'criterion_feedback': {
-                u'vocabulary': 'Awesome job!',
-                u'𝖋𝖊𝖊𝖉𝖇𝖆𝖈𝖐 𝖔𝖓𝖑𝖞': 'fairly illegible.'
+                'vocabulary': 'Awesome job!',
+                '𝖋𝖊𝖊𝖉𝖇𝖆𝖈𝖐 𝖔𝖓𝖑𝖞': 'fairly illegible.'
             },
-            'overall_feedback': u''
+            'overall_feedback': ''
         }
         resp = self.request(xblock, 'self_assess', json.dumps(assessment_dict), response_format='json')
         self.assertTrue(resp['success'])
@@ -115,9 +113,9 @@ class TestSelfAssessment(XBlockHandlerTestCase):
         self.assertEqual(assessment['parts'][0]['option']['points'], 1)
 
         # Check the feedback-only criterion score/feedback
-        self.assertEqual(assessment['parts'][1]['criterion']['name'], u'𝖋𝖊𝖊𝖉𝖇𝖆𝖈𝖐 𝖔𝖓𝖑𝖞')
+        self.assertEqual(assessment['parts'][1]['criterion']['name'], '𝖋𝖊𝖊𝖉𝖇𝖆𝖈𝖐 𝖔𝖓𝖑𝖞')
         self.assertIs(assessment['parts'][1]['option'], None)
-        self.assertEqual(assessment['parts'][1]['feedback'], u'fairly illegible.')
+        self.assertEqual(assessment['parts'][1]['feedback'], 'fairly illegible.')
 
     @scenario('data/self_assessment_scenario.xml', user_id='Bob')
     def test_self_assess_workflow_error(self, xblock):
@@ -178,6 +176,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
             'openassessmentblock/self/oa_self_unavailable.html',
             {
                 'self_start': datetime.datetime(5999, 1, 1).replace(tzinfo=pytz.utc),
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': pytz.utc,
@@ -193,6 +192,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
             'openassessmentblock/self/oa_self_closed.html',
             {
                 'self_due': datetime.datetime(2000, 1, 1).replace(tzinfo=pytz.utc),
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': pytz.utc,
@@ -206,6 +206,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
         self._assert_path_and_context(
             xblock, 'openassessmentblock/self/oa_self_unavailable.html',
             {
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': pytz.utc,
@@ -217,17 +218,21 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
     def test_open_in_peer_step(self, xblock):
         # Make a submission, so we're in the peer-assessment step
         xblock.create_submission(
-            xblock.get_student_item_dict(), u"ⱣȺꝑȺ đøn'ŧ ŧȺꝁɇ nø mɇss."
+            xblock.get_student_item_dict(), ("ⱣȺꝑȺ đøn'ŧ ŧȺꝁɇ nø mɇss.", "Sample answer",)
         )
 
-        # Should still not be able to access self-assessment
+        # Should still be able to access self-assessment because peer status can be skipped
         self._assert_path_and_context(
-            xblock, 'openassessmentblock/self/oa_self_unavailable.html',
-            {
-                'allow_latex': False,
-                'prompts_type': 'text',
-                'user_timezone': pytz.utc,
-                'user_language': 'en'
+            xblock, 'openassessmentblock/self/oa_self_assessment.html', {
+                'file_upload_type': True,
+                'self_submission': True,
+                'prompts_type': True,
+                'self_file_urls': True,
+                'rubric_criteria': True,
+                'user_language': True,
+                'allow_latex': True,
+                'user_timezone': True,
+                'allow_multiple_files': True,
             }
         )
 
@@ -237,11 +242,12 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
         # self step, but not with the peer step (because we're waiting
         # to be assessed), then the self step should display as completed.
         xblock.create_submission(
-            xblock.get_student_item_dict(), u"𝓟𝓪𝓼𝓼 𝓽𝓱𝓮 𝓹𝓮𝓪𝓼"
+            xblock.get_student_item_dict(), "𝓟𝓪𝓼𝓼 𝓽𝓱𝓮 𝓹𝓮𝓪𝓼"
         )
         self._assert_path_and_context(
             xblock, 'openassessmentblock/self/oa_self_complete.html',
             {
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': None,
@@ -257,7 +263,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
     @scenario('data/self_then_peer.xml', user_id="The Bee Gees")
     def test_self_then_peer(self, xblock):
         xblock.create_submission(
-            xblock.get_student_item_dict(), u"Stayin' alive!"
+            xblock.get_student_item_dict(), "Stayin' alive!"
         )
 
         # In the self --> peer configuration, self can be complete
@@ -265,6 +271,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
         self._assert_path_and_context(
             xblock, 'openassessmentblock/self/oa_self_complete.html',
             {
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': None,
@@ -282,11 +289,12 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
     def test_open_done_status(self, xblock):
         # Simulate the workflow status being "done"
         xblock.create_submission(
-            xblock.get_student_item_dict(), (u"Ⱥɨn'ŧ ɨŧ fᵾnꝁɏ 1", u"Ⱥɨn'ŧ ɨŧ fᵾnꝁɏ 2")
+            xblock.get_student_item_dict(), ("Ⱥɨn'ŧ ɨŧ fᵾnꝁɏ 1", "Ⱥɨn'ŧ ɨŧ fᵾnꝁɏ 2")
         )
         self._assert_path_and_context(
             xblock, 'openassessmentblock/self/oa_self_complete.html',
             {
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': None,
@@ -299,11 +307,12 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
     def test_open_cancelled_status(self, xblock):
         # Simulate the workflow status being "done"
         xblock.create_submission(
-            xblock.get_student_item_dict(), u"Ⱥɨn'ŧ ɨŧ fᵾnꝁɏ"
+            xblock.get_student_item_dict(), "Ⱥɨn'ŧ ɨŧ fᵾnꝁɏ"
         )
         self._assert_path_and_context(
             xblock, 'openassessmentblock/self/oa_self_cancelled.html',
             {
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': pytz.utc,
@@ -316,7 +325,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
     def test_open_self_assessing(self, xblock):
         # Simulate the workflow being in the self assessment step
         submission = xblock.create_submission(
-            xblock.get_student_item_dict(), (u"Đøɨn' ɨŧ ŧø đɇȺŧħ 1", u"Đøɨn' ɨŧ ŧø đɇȺŧħ 2")
+            xblock.get_student_item_dict(), ("Đøɨn' ɨŧ ŧø đɇȺŧħ 1", "Đøɨn' ɨŧ ŧø đɇȺŧħ 2")
         )
         self._assert_path_and_context(
             xblock, 'openassessmentblock/self/oa_self_assessment.html',
@@ -325,6 +334,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
                 'self_submission': submission,
                 'file_upload_type': None,
                 'self_file_urls': [],
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': pytz.utc,
@@ -339,18 +349,19 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
         # Simulate the workflow being in the self assessment step
         # and we've created a self-assessment
         submission = xblock.create_submission(
-            xblock.get_student_item_dict(), (u"Đøɨn' ɨŧ ŧø đɇȺŧħ 1", u"Đøɨn' ɨŧ ŧø đɇȺŧħ 2")
+            xblock.get_student_item_dict(), ("Đøɨn' ɨŧ ŧø đɇȺŧħ 1", "Đøɨn' ɨŧ ŧø đɇȺŧħ 2")
         )
         self_api.create_assessment(
             submission['uuid'],
             xblock.get_student_item_dict()['student_id'],
-            {u'𝓒𝓸𝓷𝓬𝓲𝓼𝓮': u'ﻉซƈﻉɭɭﻉกՇ', u'Form': u'Fair'},
+            {'𝓒𝓸𝓷𝓬𝓲𝓼𝓮': 'ﻉซƈﻉɭɭﻉกՇ', 'Form': 'Fair'},
             {}, "Good job!",
             create_rubric_dict(xblock.prompts, xblock.rubric_criteria)
         )
         self._assert_path_and_context(
             xblock, 'openassessmentblock/self/oa_self_complete.html',
             {
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': pytz.utc,
@@ -365,13 +376,14 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
         # Simulate the workflow being in the self assessment step
         # Since we're past the due date, the step should appear closed.
         submission = xblock.create_submission(
-            xblock.get_student_item_dict(), (u"Đøɨn' ɨŧ ŧø đɇȺŧħ 1", u"Đøɨn' ɨŧ ŧø đɇȺŧħ 2")
+            xblock.get_student_item_dict(), ("Đøɨn' ɨŧ ŧø đɇȺŧħ 1", "Đøɨn' ɨŧ ŧø đɇȺŧħ 2")
         )
         self._assert_path_and_context(
             xblock,
             'openassessmentblock/self/oa_self_closed.html',
             {
                 'self_due': datetime.datetime(2000, 1, 1).replace(tzinfo=pytz.utc),
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': pytz.utc,
@@ -387,12 +399,12 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
         # Even though the problem is closed, we should still see
         # that we completed the step.
         submission = xblock.create_submission(
-            xblock.get_student_item_dict(), (u"Đøɨn' ɨŧ ŧø đɇȺŧħ 1", u"Đøɨn' ɨŧ ŧø đɇȺŧħ 2")
+            xblock.get_student_item_dict(), ("Đøɨn' ɨŧ ŧø đɇȺŧħ 1", "Đøɨn' ɨŧ ŧø đɇȺŧħ 2")
         )
         self_api.create_assessment(
             submission['uuid'],
             xblock.get_student_item_dict()['student_id'],
-            {u'𝓒𝓸𝓷𝓬𝓲𝓼𝓮': u'ﻉซƈﻉɭɭﻉกՇ', u'Form': u'Fair'},
+            {'𝓒𝓸𝓷𝓬𝓲𝓼𝓮': 'ﻉซƈﻉɭɭﻉกՇ', 'Form': 'Fair'},
             {}, "Good job!",
             create_rubric_dict(xblock.prompts, xblock.rubric_criteria)
         )
@@ -405,6 +417,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
             xblock, 'openassessmentblock/self/oa_self_complete.html',
             {
                 'self_due': datetime.datetime(2000, 1, 1).replace(tzinfo=pytz.utc),
+                'allow_multiple_files': True,
                 'allow_latex': False,
                 'prompts_type': 'text',
                 'user_timezone': pytz.utc,
@@ -419,7 +432,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
         # Simulate the workflow being in the self assessment step
         # and we've created a self-assessment
         submission = xblock.create_submission(
-            xblock.get_student_item_dict(), (u"Test submission 1", u"Test submission 2")
+            xblock.get_student_item_dict(), ("Test submission 1", "Test submission 2")
         )
 
         xblock.get_workflow_info = mock.Mock(return_value={
@@ -427,8 +440,8 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
         })
 
         resp = self.request(xblock, 'render_self_assessment', json.dumps({}))
-        self.assertIn(u'in progress', resp.decode('utf-8').lower())
-        self.assertIn(u'Test submission', resp.decode('utf-8'))
+        self.assertIn('in progress', resp.decode('utf-8').lower())
+        self.assertIn('Test submission', resp.decode('utf-8'))
 
     @scenario('data/self_assessment_open.xml', user_id='Bob')
     def test_retrieve_api_error(self, xblock):
@@ -439,7 +452,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
         with mock.patch('openassessment.xblock.self_assessment_mixin.self_api') as mock_self:
             mock_self.get_assessment.side_effect = self_api.SelfAssessmentRequestError
             resp = self.request(xblock, 'render_self_assessment', json.dumps({}))
-            self.assertIn(u'error', resp.decode('utf-8').lower())
+            self.assertIn('error', resp.decode('utf-8').lower())
 
     def _assert_path_and_context(
             self, xblock, expected_path, expected_context,
@@ -478,7 +491,7 @@ class TestSelfAssessmentRender(XBlockHandlerTestCase):
         expected_context['xblock_id'] = xblock.scope_ids.usage_id
 
         self.assertEqual(path, expected_path)
-        six.assertCountEqual(self, context, expected_context)
+        self.assertCountEqual(context, expected_context)
 
         # Verify that we render without error
         resp = self.request(xblock, 'render_self_assessment', json.dumps({}))

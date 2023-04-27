@@ -1,9 +1,7 @@
 """ Test Cases for Api"""
-from __future__ import absolute_import
+from unittest.mock import patch
 
 import ddt
-from mock import patch
-
 from django.db import DatabaseError
 from django.test.utils import override_settings
 from pytest import raises
@@ -62,7 +60,7 @@ class TestAssessmentWorkflowApi(CacheResetTest):
         self.assertEqual(
             workflow_keys,
             {
-                'submission_uuid', 'status', 'created', 'modified', 'score'
+                'submission_uuid', 'status', 'created', 'modified', 'score', 'assessment_score_priority'
             }
         )
         self.assertEqual(workflow["submission_uuid"], submission["uuid"])
@@ -72,6 +70,17 @@ class TestAssessmentWorkflowApi(CacheResetTest):
             submission["uuid"], data["requirements"]
         )
         del workflow_from_get['status_details']
+
+        # as peer step is skipable, we expect next possible status to be current status
+        if first_step == 'peer' and data["steps"].index('peer') < len(data["steps"]) - 1:
+            workflow = dict(workflow)
+            workflow['status'] = data["steps"][data["steps"].index('peer') + 1]
+            workflow_from_get = dict(workflow_from_get)
+
+            # the change in `workflow` variable causes modified field to get changed.
+            del workflow['modified']
+            del workflow_from_get['modified']
+
         self.assertEqual(workflow, workflow_from_get)
 
         # Test that the Peer Workflow is, or is not created, based on when peer
@@ -153,7 +162,7 @@ class TestAssessmentWorkflowApi(CacheResetTest):
         self.assertEqual(
             workflow_keys,
             {
-                'submission_uuid', 'status', 'created', 'modified', 'score'
+                'submission_uuid', 'status', 'created', 'modified', 'score', 'assessment_score_priority'
             }
         )
         self.assertEqual(workflow["submission_uuid"], submission["uuid"])
@@ -480,6 +489,26 @@ class TestAssessmentWorkflowApi(CacheResetTest):
 
         workflow = workflow_api.get_assessment_workflow_cancellation(submission["uuid"])
         self.assertIsNotNone(workflow)
+
+    def test_get_workflows_for_status(self):
+        """
+        Check that workflows for a given status are correctly retrieved.
+        """
+        for status in ["peer", "waiting", "done"]:
+            self._create_workflow_with_status("user", "test/1/1", "peer-problem", status)
+
+        retrieved = workflow_api.get_workflows_for_status(
+            "test/1/1",
+            "peer-problem",
+            ["peer", "done"],
+        )
+
+        # Check that only two items were retrieved
+        self.assertEqual(len(retrieved), 2)
+        self.assertCountEqual(
+            ["peer", "done"],
+            [obj["status"] for obj in retrieved],
+        )
 
     def _create_workflow_with_status(
             self, student_id, course_id, item_id,

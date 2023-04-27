@@ -2,14 +2,10 @@
 Test resolving unspecified dates and date strings to datetimes.
 """
 
-from __future__ import absolute_import
-
 import datetime
 
 import ddt
 import pytz
-import six
-from six.moves import range
 
 from django.test import TestCase
 
@@ -17,7 +13,9 @@ from workbench.runtime import WorkBenchUserService
 from openassessment.xblock.resolve_dates import DISTANT_FUTURE, DISTANT_PAST, resolve_dates
 from openassessment.xblock.user_data import get_user_preferences
 
-STUB_I18N = lambda x: x
+
+def STUB_I18N(x):
+    return x
 
 
 @ddt.ddt
@@ -25,7 +23,7 @@ class ResolveDatesTest(TestCase):
     """ Tests dates for resolved correctly. """
 
     def setUp(self):
-        super(ResolveDatesTest, self).setUp()
+        super().setUp()
         # Construct a dictionary of datetimes for our test data to index
         self.DATES = {  # pylint: disable=invalid-name
             (day - 1): datetime.datetime(2014, 1, day).replace(tzinfo=pytz.UTC)
@@ -36,7 +34,7 @@ class ResolveDatesTest(TestCase):
 
         # Construct a dictionary of ISO-formatted date strings for our test data to index
         # pylint: disable=invalid-name
-        self.DATE_STRINGS = {key: val.isoformat() for key, val in six.iteritems(self.DATES)}
+        self.DATE_STRINGS = {key: val.isoformat() for key, val in self.DATES.items()}
         self.DATE_STRINGS[None] = None
 
     @ddt.file_data('data/resolve_dates.json')

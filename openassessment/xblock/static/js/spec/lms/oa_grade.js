@@ -1,3 +1,6 @@
+import BaseView from 'lms/oa_base';
+import GradeView from 'lms/oa_grade';
+
 /**
 Tests for OpenAssessment grade view.
 **/
@@ -41,9 +44,16 @@ describe("OpenAssessment.GradeView", function() {
         server = new StubServer();
 
         // Create and install the view
-        var gradeElement = $('.step--grade').get(0);
-        var baseView = new OpenAssessment.BaseView(runtime, gradeElement, server, {});
-        view = new OpenAssessment.GradeView(gradeElement, server, baseView);
+        var rootElement = $('.step--grade').parent().get(0);
+        var data = {
+            AVAILABLE_EDITORS: {
+                'text': {
+                    'js': ['/base/js/src/lms/editors/oa_editor_textarea.js']
+                }
+            }
+        }
+        var baseView = new BaseView(runtime, rootElement, server, data);
+        view = baseView.gradeView
         view.installHandlers();
     });
 

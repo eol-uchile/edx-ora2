@@ -1,13 +1,8 @@
-# -*- coding: utf-8 -*-
 """
 Tests for assessment models.
 """
 
-from __future__ import absolute_import
-
 import copy
-
-from six.moves import range
 
 from openassessment.assessment.models import Criterion, CriterionOption, InvalidRubricSelection, Rubric
 from openassessment.assessment.test.constants import RUBRIC
@@ -26,23 +21,23 @@ class RubricIndexTest(CacheResetTest):
         """
         Create a rubric in the database.
         """
-        super(RubricIndexTest, self).setUp()
+        super().setUp()
 
         self.rubric = Rubric.objects.create()
         self.criteria = [
             Criterion.objects.create(
                 rubric=self.rubric,
-                name=u"test criterion {num}".format(num=num),
+                name=f"test criterion {num}",
                 order_num=num,
             ) for num in range(self.NUM_CRITERIA)
         ]
 
-        self.options = dict()
+        self.options = {}
         for criterion in self.criteria:
             self.options[criterion.name] = [
                 CriterionOption.objects.create(
                     criterion=criterion,
-                    name=u"test option {num}".format(num=num),
+                    name=f"test option {num}",
                     order_num=num,
                     points=num
                 ) for num in range(self.NUM_OPTIONS)
@@ -70,7 +65,7 @@ class RubricIndexTest(CacheResetTest):
         missing = self.rubric.index.find_missing_criteria([
             'test criterion 0', 'test criterion 1', 'test criterion 3'
         ])
-        expected_missing = set(['test criterion 2'])
+        expected_missing = {'test criterion 2'}
         self.assertEqual(missing, expected_missing)
 
     def test_invalid_option(self):

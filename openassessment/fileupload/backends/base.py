@@ -1,10 +1,8 @@
 """ File Uploads backends. """
-from __future__ import absolute_import
+
 
 import abc
 import mimetypes
-
-import six
 
 from django.conf import settings
 
@@ -61,7 +59,7 @@ class Settings:
         return mimetypes.guess_extension(mime_type) or ''
 
 
-class BaseBackend(six.with_metaclass(abc.ABCMeta, object)):
+class BaseBackend(metaclass=abc.ABCMeta):
     """ Base class for file upload backends. """
 
     UPLOAD_URL_TIMEOUT = 3600
@@ -157,7 +155,7 @@ class BaseBackend(six.with_metaclass(abc.ABCMeta, object)):
         Returns:
             A key name (str) to use constructing URLs.
         """
-        return u"{prefix}/{key}".format(
+        return "{prefix}/{key}".format(
             prefix=Settings.get_prefix(),
             key=key
         )

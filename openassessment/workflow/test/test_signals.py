@@ -1,18 +1,16 @@
 """
 Tests for Django signals and receivers defined by the workflow API.
 """
-from __future__ import absolute_import
+from unittest import mock
 
 import ddt
-import mock
-
 from django.db import DatabaseError
 
+from submissions import api as sub_api
 from openassessment.assessment.signals import assessment_complete_signal
 from openassessment.test_utils import CacheResetTest
 from openassessment.workflow import api as workflow_api
 from openassessment.workflow.models import AssessmentWorkflow
-from submissions import api as sub_api
 
 
 @ddt.ddt
@@ -31,7 +29,7 @@ class UpdateWorkflowSignalTest(CacheResetTest):
         """
         Create a submission.
         """
-        super(UpdateWorkflowSignalTest, self).setUp()
+        super().setUp()
         submission = sub_api.create_submission(self.STUDENT_ITEM, "test answer")
         self.submission_uuid = submission['uuid']
 

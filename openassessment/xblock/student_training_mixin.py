@@ -1,14 +1,10 @@
 """
 Student training step in the OpenAssessment XBlock.
 """
-from __future__ import absolute_import
-
 import logging
-
-import six
-
 from webob import Response
 from xblock.core import XBlock
+
 from openassessment.assessment.api import student_training
 from openassessment.workflow.errors import AssessmentWorkflowError
 from openassessment.xblock.data_conversion import convert_training_examples_list_to_dict, create_submission_dict
@@ -50,14 +46,14 @@ class StudentTrainingMixin:
 
         """
         if "student-training" not in self.assessment_steps:
-            return Response(u"")
+            return Response("")
 
         try:
             path, context = self.training_path_and_context()
         except Exception:  # pylint: disable=broad-except
-            msg = u"Could not render Learner Training step for submission {}.".format(self.submission_uuid)
+            msg = f"Could not render Learner Training step for submission {self.submission_uuid}."
             logger.exception(msg)
-            return self.render_error(self._(u"An unexpected error occurred."))
+            return self.render_error(self._("An unexpected error occurred."))
         else:
             return self.render_assessment(path, context)
 
@@ -67,7 +63,7 @@ class StudentTrainingMixin:
         """
         parts = answer.get('parts', [])
         if parts and isinstance(parts[0], dict):
-            if isinstance(parts[0].get('text'), six.string_types):
+            if isinstance(parts[0].get('text'), str):
                 return create_submission_dict({'answer': answer}, self.prompts)
         return None
 
@@ -75,7 +71,7 @@ class StudentTrainingMixin:
         """
         Helper to parse answer as a list of strings.
         """
-        if answer and isinstance(answer[0], six.string_types):
+        if answer and isinstance(answer[0], str):
             return self._parse_answer_string(answer[0])
         elif not answer:
             return self._parse_answer_string("")
@@ -99,13 +95,13 @@ class StudentTrainingMixin:
         if not example:
             return (
                 {},
-                u"No training example was returned from the API for student with Submission UUID {}".format(
+                "No training example was returned from the API for student with Submission UUID {}".format(
                     self.submission_uuid
                 )
             )
         answer = example['answer']
         submission_dict = None
-        if isinstance(answer, six.string_types):
+        if isinstance(answer, str):
             submission_dict = self._parse_answer_string(answer)
         elif isinstance(answer, dict):
             submission_dict = self._parse_answer_dict(answer)
@@ -114,7 +110,7 @@ class StudentTrainingMixin:
 
         return (submission_dict, "") or (
             {},
-            u"Improperly formatted example, cannot render student training. Example: {}".format(example)
+            f"Improperly formatted example, cannot render student training. Example: {example}"
         )
 
     def training_path_and_context(self):
@@ -135,6 +131,7 @@ class StudentTrainingMixin:
         context = {"xblock_id": self.get_xblock_id()}
         template = 'openassessmentblock/student_training/student_training_unavailable.html'
 
+        context['allow_multiple_files'] = self.allow_multiple_files
         # add allow_latex field to the context
         context['allow_latex'] = self.allow_latex
         context['prompts_type'] = self.prompts_type
@@ -227,9 +224,9 @@ class StudentTrainingMixin:
 
         """
         if 'options_selected' not in data:
-            return {'success': False, 'msg': self._(u"Missing options_selected key in request")}
+            return {'success': False, 'msg': self._("Missing options_selected key in request")}
         if not isinstance(data['options_selected'], dict):
-            return {'success': False, 'msg': self._(u"options_selected must be a dictionary")}
+            return {'success': False, 'msg': self._("options_selected must be a dictionary")}
 
         # Check the student's scores against the course author's scores.
         # This implicitly updates the student training workflow (which example essay is shown)
@@ -249,22 +246,22 @@ class StudentTrainingMixin:
             )
         except student_training.StudentTrainingRequestError:
             msg = (
-                u"Could not check learner training scores for the learner with submission UUID {uuid}"
+                "Could not check learner training scores for the learner with submission UUID {uuid}"
             ).format(uuid=self.submission_uuid)
             logger.warning(msg, exc_info=True)
             return {
                 'success': False,
-                'msg': self._(u"Your scores could not be checked.")
+                'msg': self._("Your scores could not be checked.")
             }
         except student_training.StudentTrainingInternalError:
             return {
                 'success': False,
-                'msg': self._(u"Your scores could not be checked.")
+                'msg': self._("Your scores could not be checked.")
             }
         except Exception:  # pylint: disable=broad-except
             return {
                 'success': False,
-                'msg': self._(u"An unexpected error occurred.")
+                'msg': self._("An unexpected error occurred.")
             }
         else:
             try:
@@ -275,6 +272,6 @@ class StudentTrainingMixin:
                 return {'success': False, 'msg': msg}
             return {
                 'success': True,
-                'msg': u'',
+                'msg': '',
                 'corrections': corrections,
             }

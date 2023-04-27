@@ -1,23 +1,20 @@
 """
 Fields and methods used by the LMS and Studio.
 """
-
-from __future__ import absolute_import
-
-import six
-
 from xblock.fields import DateTime, Dict, Float, Scope, String
 
 
 class GroupAccessDict(Dict):
     """Special Dict class for serializing the group_access field"""
-    def from_json(self, access_dict):  # pylint: disable=arguments-differ
+    def from_json(self, access_dict):  # pylint: disable=arguments-differ, arguments-renamed
         if access_dict is not None:
             return {int(k): access_dict[k] for k in access_dict}
+        return None
 
-    def to_json(self, access_dict):  # pylint: disable=arguments-differ
+    def to_json(self, access_dict):  # pylint: disable=arguments-differ, arguments-renamed
         if access_dict is not None:
-            return {six.text_type(k): access_dict[k] for k in access_dict}
+            return {str(k): access_dict[k] for k in access_dict}
+        return None
 
 
 class LmsCompatibilityMixin:

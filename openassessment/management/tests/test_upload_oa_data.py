@@ -1,15 +1,14 @@
-# -*- coding: utf-8 -*-
 """
 Tests for management command that uploads submission/assessment data.
 """
-from __future__ import absolute_import
+
 
 import tarfile
 from io import BytesIO
+from urllib.parse import urlparse
 
-from six.moves import range
 
-import boto
+import boto3
 import moto
 from submissions import api as sub_api
 from openassessment.management.commands import upload_oa_data
@@ -23,30 +22,30 @@ class UploadDataTest(CacheResetTest):
     but the contents of the generated CSV files are tested elsewhere.
     """
 
-    COURSE_ID = u"TɘꙅT ↄoUᴙꙅɘ"
-    BUCKET_NAME = u"com.example.data"
+    COURSE_ID = "TɘꙅT ↄoUᴙꙅɘ"
+    BUCKET_NAME = "com.example.data"
     CSV_NAMES = [
         "assessment.csv", "assessment_part.csv",
         "assessment_feedback.csv", "assessment_feedback_option.csv",
         "submission.csv", "score.csv",
     ]
 
-    @moto.mock_s3_deprecated
+    @moto.mock_s3
     def test_upload(self):
         # Create an S3 bucket using the fake S3 implementation
-        conn = boto.connect_s3()
-        conn.create_bucket(self.BUCKET_NAME)
+        conn = boto3.client("s3")
+        conn.create_bucket(Bucket=self.BUCKET_NAME)
 
         # Create some submissions to ensure that we cover
         # the progress indicator code.
         for index in range(50):
             student_item = {
-                'student_id': "test_user_{}".format(index),
+                'student_id': f"test_user_{index}",
                 'course_id': self.COURSE_ID,
                 'item_id': 'test_item',
                 'item_type': 'openassessment',
             }
-            submission_text = u"test submission {}".format(index)
+            submission_text = f"test submission {index}"
             submission = sub_api.create_submission(student_item, submission_text)
             workflow_api.create_workflow(submission['uuid'], ['peer', 'self'])
 
@@ -58,9 +57,12 @@ class UploadDataTest(CacheResetTest):
 
         # Retrieve the uploaded file from the fake S3 implementation
         self.assertEqual(len(cmd.history), 1)
-        bucket = conn.get_all_buckets()[0]
-        key = bucket.get_key(cmd.history[0]['key'])
-        contents = BytesIO(key.get_contents_as_string())
+        bucket = conn.list_buckets()["Buckets"][0]["Name"]
+        key = conn.list_objects(Bucket=bucket)["Contents"][0]["Key"]
+        contents = BytesIO(conn.get_object(
+            Bucket=self.BUCKET_NAME,
+            Key=key
+        )["Body"].read())
 
         # Expect that the contents contain all the expected CSV files
         with tarfile.open(mode="r:gz", fileobj=contents) as tar:
@@ -74,4 +76,10 @@ class UploadDataTest(CacheResetTest):
 
         # Expect that we generated a URL for the bucket
         url = cmd.history[0]['url']
-        self.assertIn("https://{}".format(self.BUCKET_NAME), url)
+        parsed_url = urlparse(url)
+        self.assertEqual("https", parsed_url.scheme)
+        self.assertIn(
+            parsed_url.netloc,
+            ["s3.eu-west-1.amazonaws.com", "s3.amazonaws.com"]
+        )
+        self.assertIn(f"/{self.BUCKET_NAME}", parsed_url.path)

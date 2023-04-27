@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Default data initializations for the XBlock, with formatting preserved."""
 # pylint: disable=line-too-long
 
@@ -53,7 +52,7 @@ DEFAULT_RUBRIC_CRITERIA = [
                 'explanation': """Includes sufficient information and supporting details. (Details may not be fully developed; ideas may be listed.)  Explores some facets of the topic."""  # nopep8
             },
             {
-                'order_num': 3, 'points': 3, 'name': 'Excellent', 'label': 'Excellent',
+                'order_num': 3, 'points': 5, 'name': 'Excellent', 'label': 'Excellent',
                 'explanation': """Includes in-depth information and exceptional supporting details that are fully developed.  Explores all facets of the topic."""  # nopep8
             },
         ],
@@ -130,6 +129,9 @@ DEFAULT_PEER_ASSESSMENT = {
     "due": DEFAULT_DUE,
     "must_grade": 5,
     "must_be_graded_by": 3,
+    "enable_flexible_grading": False,
+    "flexible_grading_days": 7,
+    "flexible_grading_graded_by_percentage": 30
 }
 
 DEFAULT_SELF_ASSESSMENT = {
@@ -145,6 +147,13 @@ DEFAULT_STAFF_ASSESSMENT = {
     "required": False,
 }
 
+ACTIVE_STAFF_ASSESSMENT = {
+    "name": "staff-assessment",
+    "start": DEFAULT_START,
+    "due": DEFAULT_DUE,
+    "required": True,
+}
+
 DEFAULT_ASSESSMENT_MODULES = [
     DEFAULT_STUDENT_TRAINING,
     DEFAULT_PEER_ASSESSMENT,
@@ -157,4 +166,28 @@ DEFAULT_EDITOR_ASSESSMENTS_ORDER = [
     "peer-assessment",
     "self-assessment",
     "staff-assessment",
+]
+
+SELF_ASSESSMENT_MODULES = [
+    DEFAULT_SELF_ASSESSMENT,
+]
+
+PEER_ASSESSMENT_MODULES = [
+    DEFAULT_STUDENT_TRAINING,
+    DEFAULT_PEER_ASSESSMENT,
+]
+
+STAFF_ASSESSMENT_MODULES = [
+    ACTIVE_STAFF_ASSESSMENT,
+]
+
+SELF_TO_PEER_ASSESSMENT_MODULES = [
+    DEFAULT_STUDENT_TRAINING,
+    DEFAULT_SELF_ASSESSMENT,
+    DEFAULT_PEER_ASSESSMENT,
+]
+
+SELF_TO_STAFF_ASSESSMENT_MODULES = [
+    DEFAULT_SELF_ASSESSMENT,
+    ACTIVE_STAFF_ASSESSMENT,
 ]

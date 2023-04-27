@@ -1,14 +1,10 @@
-# coding=utf-8
 """
 Tests for assessment serializers.
 """
 
-from __future__ import absolute_import
-
 import copy
 import json
 import os.path
-import six
 
 from openassessment.assessment.models import Assessment, AssessmentFeedback, AssessmentPart
 from openassessment.assessment.serializers import (AssessmentFeedbackSerializer, InvalidRubric, full_assessment_dict,
@@ -20,7 +16,7 @@ from .constants import RUBRIC
 
 def json_data(filename):
     curr_dir = os.path.dirname(__file__)
-    with open(os.path.join(curr_dir, filename), "r") as json_file:
+    with open(os.path.join(curr_dir, filename)) as json_file:
         return json.load(json_file)
 
 
@@ -54,7 +50,7 @@ class CriterionDeserializationTest(CacheResetTest):
             rubric_from_dict(json_data('data/rubric/empty_criteria.json'))
         self.assertEqual(
             criteria_exception_message.exception.errors,
-            {'criteria': [u'Must have at least one criterion']}
+            {'criteria': ['Must have at least one criterion']}
         )
 
     def test_missing_criteria(self):
@@ -62,7 +58,7 @@ class CriterionDeserializationTest(CacheResetTest):
             rubric_from_dict(json_data('data/rubric/missing_criteria.json'))
         self.assertEqual(
             criteria_exception_message.exception.errors,
-            {'criteria': [u'This field is required.']}
+            {'criteria': ['This field is required.']}
         )
 
 
@@ -80,7 +76,7 @@ class CriterionOptionDeserializationTest(CacheResetTest):
             criteria_exception_message.exception.errors,
             {
                 'criteria': [
-                    {'options': [u'This field is required.']},
+                    {'options': ['This field is required.']},
                     {}  # No errors in second criterion
                 ]
             }
@@ -97,7 +93,7 @@ class AssessmentFeedbackSerializerTest(CacheResetTest):
         feedback.add_options(['I liked my assessment', 'I thought my assessment was unfair'])
 
         serialized = AssessmentFeedbackSerializer(feedback).data
-        six.assertCountEqual(self, serialized, {
+        self.assertCountEqual(serialized, {
             'submission_uuid': 'abc123',
             'feedback_text': 'Test feedback',
             'options': [
@@ -113,7 +109,7 @@ class AssessmentFeedbackSerializerTest(CacheResetTest):
         )
 
         serialized = AssessmentFeedbackSerializer(feedback).data
-        six.assertCountEqual(self, serialized, {
+        self.assertCountEqual(serialized, {
             'submission_uuid': 'abc123',
             'feedback_text': 'Test feedback',
             'options': [],
@@ -137,11 +133,11 @@ class AssessmentSerializerTest(CacheResetTest):
         # Create an assessment for the rubric
         assessment = Assessment.create(rubric, "Bob", "submission-UUID", "PE")
         selected = {
-            u"vøȼȺƀᵾłȺɍɏ": u"𝓰𝓸𝓸𝓭",
-            u"ﻭɼค๓๓คɼ": u"єχ¢єℓℓєηт",
+            "vøȼȺƀᵾłȺɍɏ": "𝓰𝓸𝓸𝓭",
+            "ﻭɼค๓๓คɼ": "єχ¢єℓℓєηт",
         }
         feedback = {
-            u"feedback only": u"enjoy the feedback!"
+            "feedback only": "enjoy the feedback!"
         }
         AssessmentPart.create_from_option_names(assessment, selected, feedback=feedback)
 
@@ -149,11 +145,11 @@ class AssessmentSerializerTest(CacheResetTest):
         serialized = full_assessment_dict(assessment)
 
         # Verify that the assessment dict correctly serialized the criterion with options.
-        self.assertEqual(serialized['parts'][0]['criterion']['name'], u"vøȼȺƀᵾłȺɍɏ")
-        self.assertEqual(serialized['parts'][0]['option']['name'], u"𝓰𝓸𝓸𝓭")
-        self.assertEqual(serialized['parts'][1]['criterion']['name'], u"ﻭɼค๓๓คɼ")
-        self.assertEqual(serialized['parts'][1]['option']['name'], u"єχ¢єℓℓєηт")
+        self.assertEqual(serialized['parts'][0]['criterion']['name'], "vøȼȺƀᵾłȺɍɏ")
+        self.assertEqual(serialized['parts'][0]['option']['name'], "𝓰𝓸𝓸𝓭")
+        self.assertEqual(serialized['parts'][1]['criterion']['name'], "ﻭɼค๓๓คɼ")
+        self.assertEqual(serialized['parts'][1]['option']['name'], "єχ¢єℓℓєηт")
 
         # Verify that the assessment dict correctly serialized the criterion with no options.
         self.assertIs(serialized['parts'][2]['option'], None)
-        self.assertEqual(serialized['parts'][2]['criterion']['name'], u"feedback only")
+        self.assertEqual(serialized['parts'][2]['criterion']['name'], "feedback only")

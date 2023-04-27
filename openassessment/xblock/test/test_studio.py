@@ -2,18 +2,27 @@
 View-level tests for Studio view of OpenAssessment XBlock.
 """
 
-from __future__ import absolute_import
-
 import copy
 import datetime as dt
 import json
+from unittest.mock import MagicMock, patch, Mock, PropertyMock
 
 from ddt import ddt, file_data
-from mock import MagicMock, patch, Mock
 import pytz
-import six
 
+from openassessment.xblock.config_mixin import ConfigMixin
 from .base import XBlockHandlerTestCase, scenario
+
+
+def disable_rubric_reuse(func):
+    """
+    Decorator to disable rubric reuse, since we've mocked away all WaffleFlag calls to be truthy.
+    Rubric reuse hits the modulestore, which requires some complicated mocking as implemented currently.
+    """
+    def wrapper(*args, **kwargs):
+        with patch.object(ConfigMixin, 'is_rubric_reuse_enabled', PropertyMock(return_value=False)):
+            return func(*args, **kwargs)
+    return wrapper
 
 
 @ddt
@@ -33,6 +42,8 @@ class StudioViewTest(XBlockHandlerTestCase):
         "submission_due": "4014-02-27T09:46",
         "file_upload_type": None,
         "white_listed_file_types": '',
+        "allow_multiple_files": True,
+        "show_rubric_during_response": False,
         "allow_latex": False,
         "leaderboard_show": 4,
         "assessments": [{"name": "self-assessment"}],
@@ -112,20 +123,15 @@ class StudioViewTest(XBlockHandlerTestCase):
 
     @classmethod
     def setUpClass(cls):
-        super(StudioViewTest, cls).setUpClass()
-        cls.waffle_switch_patcher = patch(
-            'openassessment.xblock.config_mixin.import_waffle_switch'
-        )
+        super().setUpClass()
         cls.waffle_course_flag_patcher = patch(
             'openassessment.xblock.config_mixin.import_course_waffle_flag'
         )
-        cls.waffle_switch_patcher.start()
         cls.waffle_course_flag_patcher.start()
 
     @classmethod
     def tearDownClass(cls):
-        super(StudioViewTest, cls).tearDownClass()
-        cls.waffle_switch_patcher.stop()
+        super().tearDownClass()
         cls.waffle_course_flag_patcher.stop()
 
     @scenario('data/basic_scenario.xml')
@@ -133,17 +139,33 @@ class StudioViewTest(XBlockHandlerTestCase):
         # Default value should not be empty
         self.assertEqual(xblock.fields['title'].default, "Open Response Assessment")
 
+    @disable_rubric_reuse
     @scenario('data/basic_scenario.xml')
     def test_render_studio_view(self, xblock):
         self._mock_teamsets(xblock)
         frag = self.runtime.render(xblock, 'studio_view')
         self.assertTrue(frag.body_html().find('openassessment-edit'))
 
+    @disable_rubric_reuse
     @scenario('data/student_training.xml')
     def test_render_studio_with_training(self, xblock):
         self._mock_teamsets(xblock)
         frag = self.runtime.render(xblock, 'studio_view')
         self.assertTrue(frag.body_html().find('openassessment-edit'))
+
+    @scenario('data/basic_scenario.xml')
+    def test_render_studio_with_rubric_reuse(self, xblock):
+        self._mock_teamsets(xblock)
+        with patch.object(xblock, 'get_other_ora_blocks_for_rubric_editor_context') as mock_get_rubrics:
+            mock_get_rubrics.return_value = [
+                {
+                    'location': f'test-location-{i}',
+                    'display_name': f'Display Name {i}',
+                } for i in range(10)
+            ]
+            frag = self.runtime.render(xblock, 'studio_view')
+            self.assertTrue(frag.body_html().find('openassessment-edit'))
+            mock_get_rubrics.assert_called_once()
 
     @file_data('data/update_xblock.json')
     @scenario('data/basic_scenario.xml')
@@ -155,6 +177,7 @@ class StudioViewTest(XBlockHandlerTestCase):
 
     @scenario('data/basic_scenario.xml')
     def test_include_leaderboard_in_editor(self, xblock):
+        xblock.location = Mock()
         self._mock_teamsets(xblock)
         xblock.leaderboard_show = 15
         self.assertEqual(xblock.editor_context()['leaderboard_show'], 15)
@@ -248,8 +271,8 @@ class StudioViewTest(XBlockHandlerTestCase):
         # that verify this extensively.
         self.assertEqual(xblock.title, old_title)
         self.assertEqual(xblock.prompts, old_prompts)
-        six.assertCountEqual(self, xblock.rubric_assessments, old_assessments)
-        six.assertCountEqual(self, xblock.rubric_criteria, old_criteria)
+        self.assertCountEqual(xblock.rubric_assessments, old_assessments)
+        self.assertCountEqual(xblock.rubric_criteria, old_criteria)
 
     @scenario('data/basic_scenario.xml')
     def test_check_released(self, xblock):
@@ -268,6 +291,7 @@ class StudioViewTest(XBlockHandlerTestCase):
         self.assertFalse(resp['is_released'])
         self.assertIn('msg', resp)
 
+    @disable_rubric_reuse
     @scenario('data/self_then_peer.xml')
     def test_render_editor_assessment_order(self, xblock):
         self._mock_teamsets(xblock)
@@ -319,7 +343,7 @@ class StudioViewTest(XBlockHandlerTestCase):
                 "index": rendered_html.find(asmnt_css_id)
             }
             for asmnt_name, asmnt_css_id
-            in six.iteritems(self.ASSESSMENT_CSS_IDS)
+            in self.ASSESSMENT_CSS_IDS.items()
         ]
         actual_assessment_order = [
             index_dict['name']
@@ -330,6 +354,7 @@ class StudioViewTest(XBlockHandlerTestCase):
 
     @scenario('data/basic_scenario.xml')
     def test_editor_context_assigns_labels(self, xblock):
+        xblock.location = Mock()
         self._mock_teamsets(xblock)
         # Strip out any labels from criteria/options that may have been imported.
         for criterion in xblock.rubric_criteria:
@@ -361,6 +386,7 @@ class StudioViewTest(XBlockHandlerTestCase):
                 for option in criterion['options']:
                     self.assertEqual(option['label'], option['name'])
 
+    @disable_rubric_reuse
     @scenario('data/basic_scenario.xml')
     def test_render_studio_with_teamset_names(self, xblock):
         self._mock_teamsets(xblock)
@@ -394,3 +420,9 @@ class StudioViewTest(XBlockHandlerTestCase):
             Mock(name="teamset_name_a", teamset_id='teamset_id_a'),
             Mock(name="teamset_name_b", teamset_id='teamset_id_b'),
         ]
+
+    @scenario('data/invalid_dates_scenario.xml')
+    def test_invalid_dates_still_renders(self, xblock):
+        self._mock_teamsets(xblock)
+        frag = self.runtime.render(xblock, 'studio_view')
+        self.assertTrue(frag.body_html().find('openassessment-edit'))

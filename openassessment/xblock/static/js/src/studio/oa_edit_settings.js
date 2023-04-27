@@ -1,5 +1,14 @@
+import {
+  Fields,
+  InputControl,
+  IntField,
+  SelectControl,
+} from './oa_edit_fields';
+import Notifier from './oa_edit_notifier';
+import { AssessmentToggleListener } from './oa_edit_listeners';
+
 /**
-Editing interface for OpenAssessment settings (including assessments).
+Editing interface for OpenAssessment settings.
 
 Args:
     element (DOM element): The DOM element representing this view.
@@ -9,155 +18,182 @@ Args:
 Returns:
     OpenAssessment.EditSettingsView
 
-**/
-OpenAssessment.EditSettingsView = function(element, assessmentViews, data) {
-    var self = this;
+* */
+export class EditSettingsView {
+  constructor(element, assessmentViews, data) {
     this.settingsElement = element;
-    this.assessmentsElement = $(element).siblings('#openassessment_assessment_module_settings_editors').get(0);
+    this.tabElement = $('#oa_edit_settings_tab');
     this.assessmentViews = assessmentViews;
+    this.data = data;
 
-    // Configure the date and time fields
-    this.startDatetimeControl = new OpenAssessment.DatetimeControl(
-        this.element,
-        '#openassessment_submission_start_date',
-        '#openassessment_submission_start_time'
-    ).install();
+    this.onFileUploadTypeChanged = this.onFileUploadTypeChanged.bind(this);
+    this.onTeamsEnabledChange = this.onTeamsEnabledChange.bind(this);
+    this.displayName = this.displayName.bind(this);
+    this.textResponseNecessity = this.textResponseNecessity.bind(this);
+    this.textResponseEditor = this.textResponseEditor.bind(this);
+    this.fileUploadResponseNecessity = this.fileUploadResponseNecessity.bind(this);
+    this.fileUploadType = this.fileUploadType.bind(this);
+    this.fileTypeWhiteList = this.fileTypeWhiteList.bind(this);
+    this.settingSelectorEnabled = this.settingSelectorEnabled.bind(this);
+    this.multipleFilesEnabled = this.multipleFilesEnabled.bind(this);
+    this.latexEnabled = this.latexEnabled.bind(this);
+    this.teamsEnabled = this.teamsEnabled.bind(this);
+    this.isHidden = this.isHidden.bind(this);
+    this.setHidden = this.setHidden.bind(this);
+    this.teamset = this.teamset.bind(this);
+    this.leaderboardNum = this.leaderboardNum.bind(this);
+    this.validate = this.validate.bind(this);
+    this.validationErrors = this.validationErrors.bind(this);
+    this.clearValidationErrors = this.clearValidationErrors.bind(this);
 
-    this.dueDatetimeControl = new OpenAssessment.DatetimeControl(
-        this.element,
-        '#openassessment_submission_due_date',
-        '#openassessment_submission_due_time'
-    ).install();
+    new SelectControl(
+      $('#openassessment_submission_file_upload_response', this.element),
+      (selectedValue) => {
+        const el = $('#openassessment_submission_file_upload_type_wrapper', this.element);
+        const uploadType = $('#openassessment_submission_upload_selector', this.element).val();
 
-    new OpenAssessment.SelectControl(
-        $('#openassessment_submission_file_upload_response', this.element),
-        function(selectedValue) {
-            var el = $('#openassessment_submission_file_upload_type_wrapper', self.element);
-            if (!selectedValue) {
-                el.addClass('is--hidden');
-            } else {
-                el.removeClass('is--hidden');
-            }
-        },
-        new OpenAssessment.Notifier([
-            new OpenAssessment.AssessmentToggleListener(),
-        ])
-    ).install();
-
-    new OpenAssessment.SelectControl(
-        $('#openassessment_submission_upload_selector', this.element),
-        {'custom': $('#openassessment_submission_white_listed_file_types_wrapper', this.element)},
-        new OpenAssessment.Notifier([
-            new OpenAssessment.AssessmentToggleListener(),
-        ])
-    ).install();
-
-    function onTeamsEnabledChange(selectedValue) {
-        var teamsetElement = $('#openassessment_teamset_selection_wrapper', self.element);
-
-        var selfAssessment = self.assessmentViews.oa_self_assessment_editor;
-        var peerAssessment = self.assessmentViews.oa_peer_assessment_editor;
-        var trainingAssessment = self.assessmentViews.oa_student_training_editor;
-        var staffAssessment = self.assessmentViews.oa_staff_assessment_editor;
-
-        if (!selectedValue || selectedValue === '0') {
-            self.setHidden(teamsetElement, true);
-
-            self.setHidden($(selfAssessment.element), false);
-            self.setHidden($(peerAssessment.element), false);
-            self.setHidden($(trainingAssessment.element), false);
+        if (!selectedValue) {
+          el.addClass('is--hidden');
         } else {
-            self.setHidden(teamsetElement, false);
-
-            self.setHidden($(selfAssessment.element), true);
-            self.setHidden($(peerAssessment.element), true);
-            self.setHidden($(trainingAssessment.element), true);
-
-            staffAssessment.isEnabled(true);
+          el.removeClass('is--hidden');
+          // trigger refresh of file upload type to load extension list
+          this.onFileUploadTypeChanged(uploadType);
         }
-    }
-
-    this.teamsEnabledSelectControl = new OpenAssessment.SelectControl(
-        $('#openassessment_team_enabled_selector', this.element),
-        onTeamsEnabledChange,
-        new OpenAssessment.Notifier([
-            new OpenAssessment.AssessmentToggleListener(),
-        ])
+      },
+      new Notifier([new AssessmentToggleListener()]),
     ).install();
 
-    this.leaderboardIntField = new OpenAssessment.IntField(
-        $('#openassessment_leaderboard_editor', this.element),
-        {min: 0, max: 100}
+    new SelectControl(
+      $('#openassessment_submission_upload_selector', this.element),
+      this.onFileUploadTypeChanged,
+      new Notifier([new AssessmentToggleListener()]),
+    ).install();
+
+    this.teamsEnabledSelectControl = new SelectControl(
+      $('#openassessment_team_enabled_selector', this.element),
+      this.onTeamsEnabledChange,
+      new Notifier([
+        new AssessmentToggleListener(),
+      ]),
+    ).install();
+
+    this.leaderboardIntField = new IntField(
+      $('#openassessment_leaderboard_editor', this.element),
+      { min: 0, max: 100 },
     );
 
-    this.fileTypeWhiteListInputField = new OpenAssessment.InputControl(
-        $('#openassessment_submission_white_listed_file_types', this.element),
-        function(value) {
-            var badExts = [];
-            var errors = [];
-            if (!value) {
-                errors.push(gettext('File types can not be empty.'));
-                return errors;
-            }
-            var whiteList = $.map(value.replace(/\./g, '').toLowerCase().split(','), $.trim);
-            $.each(whiteList, function(index, ext) {
-                if (data.FILE_EXT_BLACK_LIST.indexOf(ext) !== -1) {
-                    badExts.push(ext);
-                }
-            });
-            if (badExts.length) {
-                errors.push(gettext('The following file types are not allowed: ') + badExts.join(','));
-            }
-
-            return errors;
+    this.fileTypeWhiteListInputField = new InputControl(
+      $('#openassessment_submission_white_listed_file_types', this.element),
+      ((value) => {
+        const badExts = [];
+        const errors = [];
+        if (!value) {
+          errors.push(gettext('File types can not be empty.'));
+          return errors;
         }
+        const whiteList = $.map(value.replace(/\./g, '').toLowerCase().split(','), $.trim);
+        $.each(whiteList, (index, ext) => {
+          if (this.data.FILE_EXT_BLACK_LIST.indexOf(ext) !== -1) {
+            badExts.push(ext);
+          }
+        });
+        if (badExts.length) {
+          errors.push(gettext('The following file types are not allowed: ') + badExts.join(','));
+        }
+
+        return errors;
+      }),
     );
 
-    this.initializeSortableAssessments();
-    onTeamsEnabledChange($('#openassessment_team_enabled_selector').val());
-};
+    this.onTeamsEnabledChange($('#openassessment_team_enabled_selector').val());
+  }
 
-OpenAssessment.EditSettingsView.prototype = {
+  getTab() {
+    return this.tabElement;
+  }
 
-    /**
-    Installs click listeners which initialize drag and drop functionality for assessment modules.
-    **/
-    initializeSortableAssessments: function() {
-        var view = this;
-        // Initialize Drag and Drop of Assessment Modules
-        $('#openassessment_assessment_module_settings_editors', view.element).sortable({
-            // On Start, we want to collapse all draggable items so that dragging is visually simple (no scrolling)
-            start: function(event, ui) {
-                // Hide all of the contents (not the headers) of the divs, to collapse during dragging.
-                $('.openassessment_assessment_module_editor', view.element).hide();
+  /**
+   * When file upload type is changed, show the corresponding extensions that will be
+   * allowed for upload
+   * @param {String} selectedValue
+   */
+  onFileUploadTypeChanged(selectedValue) {
+    const el = $(
+      '#openassessment_submission_white_listed_file_types',
+      this.element,
+    );
+    const extNote = $(
+      '#openassessment_submission_white_listed_file_types_wrapper .extension-warning',
+      this.element,
+    );
 
-                // Because of the way that JQuery actively resizes elements during dragging (directly setting
-                // the style property), the only way to over come it is to use an important tag ( :( ), or
-                // to tell JQuery to set the height to be Automatic (i.e. resize to the minimum nescesary size.)
-                // Because all of the information we don't want displayed is now hidden, an auto height will
-                // perform the apparent "collapse" that we are looking for in the Placeholder and Helper.
-                var targetHeight = 'auto';
-                // Shrink the blank area behind the dragged item.
-                ui.placeholder.height(targetHeight);
-                // Shrink the dragged item itself.
-                ui.helper.height(targetHeight);
-                // Update the sortable to reflect these changes.
-                $('#openassessment_assessment_module_settings_editors', view.element)
-                    .sortable('refresh').sortable('refreshPositions');
-            },
-            // On stop, we redisplay the divs to their original state
-            stop: function() {
-                $('.openassessment_assessment_module_editor', view.element).show();
-            },
-            snap: true,
-            axis: 'y',
-            handle: '.drag-handle',
-            cursorAt: {top: 20},
-        });
-        $('#openassessment_assessment_module_settings_editors .drag-handle', view.element).disableSelection();
-    },
+    this.fileTypeWhiteListInputField.clearValidationErrors();
 
-    /**
+    if (selectedValue === 'custom') {
+      // Enable the "allowed file types" field and hide the note banner
+      el.prop('disabled', false);
+      this.setHidden(extNote, true);
+    } else {
+      // Fill, but disable, the "allowed file types" field and show the note banner
+      if (selectedValue === 'image') {
+        el.val(this.data.ALLOWED_IMAGE_EXTENSIONS.join(', '));
+      } else if (selectedValue === 'pdf-and-image') {
+        el.val(this.data.ALLOWED_FILE_EXTENSIONS.join(', '));
+      }
+
+      el.prop('disabled', true);
+      this.setHidden(extNote, false);
+    }
+  }
+
+  onTeamsEnabledChange(selectedValue) {
+    const teamsetElement = $('#openassessment_teamset_selection_wrapper', this.element);
+    const multipleFilesElement = $('#openassessment_submission_nfile_editor', this.element);
+
+    const selfAssessment = this.assessmentViews.oa_self_assessment_editor;
+    const peerAssessment = this.assessmentViews.oa_peer_assessment_editor;
+    const trainingAssessment = this.assessmentViews.oa_student_training_editor;
+    const staffAssessment = this.assessmentViews.oa_staff_assessment_editor;
+
+    if (!selectedValue || selectedValue === '0') {
+      this.setHidden(teamsetElement, true);
+
+      this.setHidden($(selfAssessment.element), false);
+      this.setHidden($(peerAssessment.element), false);
+      this.setHidden($(trainingAssessment.element), false);
+
+      if (selfAssessment.isEnabled()) {
+        this.setHidden($('#self_assessment_schedule_editor', selfAssessment.scheduleElement), false);
+      }
+      if (peerAssessment.isEnabled()) {
+        this.setHidden($('#peer_assessment_schedule_editor', peerAssessment.scheduleElement), false);
+      }
+
+      this.setHidden($('#openassessment_leaderboard_wrapper .disabled-label'), true);
+      this.setHidden($('#openassessment_leaderboard_wrapper .teams-warning'), true);
+      $('#openassessment_leaderboard_editor').prop('disabled', false);
+      multipleFilesElement.prop('disabled', false);
+    } else {
+      this.setHidden(teamsetElement, false);
+
+      this.setHidden($(selfAssessment.element), true);
+      this.setHidden($(peerAssessment.element), true);
+      this.setHidden($(trainingAssessment.element), true);
+
+      this.setHidden($('#self_assessment_schedule_editor', selfAssessment.scheduleElement), true);
+      this.setHidden($('#peer_assessment_schedule_editor', peerAssessment.scheduleElement), true);
+
+      this.setHidden($('#openassessment_leaderboard_wrapper .disabled-label'), false);
+      this.setHidden($('#openassessment_leaderboard_wrapper .teams-warning'), false);
+      $('#openassessment_leaderboard_editor').prop('disabled', true);
+      staffAssessment.isEnabled(true);
+
+      multipleFilesElement.prop('disblaed', true);
+      multipleFilesElement.val(1);
+    }
+  }
+
+  /**
     Get or set the display name of the problem.
 
     Args:
@@ -166,43 +202,13 @@ OpenAssessment.EditSettingsView.prototype = {
     Returns:
         string
 
-    **/
-    displayName: function(name) {
-        var sel = $('#openassessment_title_editor', this.settingsElement);
-        return OpenAssessment.Fields.stringField(sel, name);
-    },
+    * */
+  displayName(name) {
+    const sel = $('#openassessment_title_editor', this.settingsElement);
+    return Fields.stringField(sel, name);
+  }
 
-    /**
-    Get or set the submission start date.
-
-    Args:
-        dateString (string, optional): If provided, set the date (YY-MM-DD).
-        timeString (string, optional): If provided, set the time (HH:MM, 24-hour clock).
-
-    Returns:
-        string (ISO-format UTC datetime)
-
-    **/
-    submissionStart: function(dateString, timeString) {
-        return this.startDatetimeControl.datetime(dateString, timeString);
-    },
-
-    /**
-    Get or set the submission end date.
-
-    Args:
-        dateString (string, optional): If provided, set the date (YY-MM-DD).
-        timeString (string, optional): If provided, set the time (HH:MM, 24-hour clock).
-
-    Returns:
-        string (ISO-format UTC datetime)
-
-    **/
-    submissionDue: function(dateString, timeString) {
-        return this.dueDatetimeControl.datetime(dateString, timeString);
-    },
-
-    /**
+  /**
      Get or set text response necessity.
 
     Args:
@@ -211,15 +217,32 @@ OpenAssessment.EditSettingsView.prototype = {
     Returns:
         string ('required', 'optional' or '')
      */
-    textResponseNecessity: function(value) {
-        var sel = $('#openassessment_submission_text_response', this.settingsElement);
-        if (value !== undefined) {
-            sel.val(value);
-        }
-        return sel.val();
-    },
+  textResponseNecessity(value) {
+    const sel = $('#openassessment_submission_text_response', this.settingsElement);
+    if (value !== undefined) {
+      sel.val(value);
+    }
+    return sel.val();
+  }
 
-    /**
+  /**
+     Get or set response editor.
+
+    Args:
+        value (string, optional): If provided, set text response necessity.
+
+    Returns:
+        string: One of available response editors
+     */
+  textResponseEditor(value) {
+    const sel = $('#openassessment_submission_text_response_editor', this.settingsElement);
+    if (value !== undefined) {
+      sel.val(value);
+    }
+    return sel.val();
+  }
+
+  /**
      Get or set file upload necessity.
 
     Args:
@@ -228,19 +251,20 @@ OpenAssessment.EditSettingsView.prototype = {
     Returns:
         string ('required', 'optional' or '')
      */
-    fileUploadResponseNecessity: function(value, triggerChange) {
-        var sel = $('#openassessment_submission_file_upload_response', this.settingsElement);
-        if (value !== undefined) {
-            triggerChange = triggerChange || false;
-            sel.val(value);
-            if (triggerChange) {
-                $(sel).trigger('change');
-            }
-        }
-        return sel.val();
-    },
+  /* eslint "no-param-reassign": 0 */
+  fileUploadResponseNecessity(value, triggerChange) {
+    const sel = $('#openassessment_submission_file_upload_response', this.settingsElement);
+    if (value !== undefined) {
+      triggerChange = triggerChange || false;
+      sel.val(value);
+      if (triggerChange) {
+        $(sel).trigger('change');
+      }
+    }
+    return sel.val();
+  }
 
-    /**
+  /**
     Get or set upload file type.
 
     Args:
@@ -249,22 +273,29 @@ OpenAssessment.EditSettingsView.prototype = {
     Returns:
         string (image, file or custom)
 
-    **/
-    fileUploadType: function(uploadType) {
-        var fileUploadTypeWrapper = $('#openassessment_submission_file_upload_type_wrapper', this.settingsElement);
-        var fileUploadAllowed = !$(fileUploadTypeWrapper).hasClass('is--hidden');
-        if (fileUploadAllowed) {
-            var sel = $('#openassessment_submission_upload_selector', this.settingsElement);
-            if (uploadType !== undefined) {
-                sel.val(uploadType);
-            }
-            return sel.val();
-        }
+    * */
+  fileUploadType(uploadType) {
+    const fileUploadTypeWrapper = $(
+      '#openassessment_submission_file_upload_type_wrapper',
+      this.settingsElement,
+    );
+    const fileUploadAllowed = !$(fileUploadTypeWrapper).hasClass('is--hidden');
+    if (fileUploadAllowed) {
+      const sel = $(
+        '#openassessment_submission_upload_selector',
+        this.settingsElement,
+      );
+      if (uploadType !== undefined) {
+        sel.val(uploadType);
+      }
+      $(sel).trigger('change');
+      return sel.val();
+    }
 
-        return '';
-    },
+    return '';
+  }
 
-    /**
+  /**
     Get or set upload file extension white list.
 
     Args:
@@ -272,82 +303,95 @@ OpenAssessment.EditSettingsView.prototype = {
 
     Returns:
         string: comma separated file extension white list string
-    **/
-    fileTypeWhiteList: function(exts) {
-        if (exts !== undefined) {
-            this.fileTypeWhiteListInputField.set(exts);
-        }
-        return this.fileTypeWhiteListInputField.get();
-    },
+    * */
+  fileTypeWhiteList(exts) {
+    if (exts !== undefined) {
+      this.fileTypeWhiteListInputField.set(exts);
+    }
+    return this.fileTypeWhiteListInputField.get();
+  }
 
-    /**
+  /**
     Helper function that, given a selector element id,
     gets or sets the enabled state of the selector.
 
     Args:
         settingId(string, required): The identifier of the selector.
         isEnabled(boolean, optional): if provided, enable/disable the setting.
-    **/
-    settingSelectorEnabled: function(settingId, isEnabled) {
-        var sel = $(settingId, this.settingsElement);
-        if (isEnabled !== undefined) {
-            if (isEnabled) {
-                sel.val(1);
-            } else {
-                sel.val(0);
-            }
-        }
-        return sel.val() === '1';
-    },
+    * */
+  settingSelectorEnabled(settingId, isEnabled) {
+    const sel = $(settingId, this.settingsElement);
+    if (isEnabled !== undefined) {
+      if (isEnabled) {
+        sel.val(1);
+      } else {
+        sel.val(0);
+      }
+    }
+    return sel.val() === '1';
+  }
 
-    /**
+  /**
+  Enable / disable multiple files upload
+
+  Args:
+      isEnabled(boolean, optional): if provided enable/disable multiple files upload
+  Returns:
+      boolean
+  * */
+  multipleFilesEnabled(isEnabled) {
+    return this.settingSelectorEnabled('#openassessment_submission_nfile_editor', isEnabled);
+  }
+
+  /**
     Enable / disable latex rendering.
 
     Args:
         isEnabled(boolean, optional): if provided enable/disable latex rendering
     Returns:
         boolean
-    **/
-    latexEnabled: function(isEnabled) {
-        return this.settingSelectorEnabled('#openassessment_submission_latex_editor', isEnabled);
-    },
-    /**
+    * */
+  latexEnabled(isEnabled) {
+    return this.settingSelectorEnabled('#openassessment_submission_latex_editor', isEnabled);
+  }
+
+  /**
     Enable/disable team assignments.
 
     Args:
         isEnabled(boolean, optional): if provided, enable/disable team assignments.
     Returns:
         boolean
-    **/
-    teamsEnabled: function(isEnabled) {
-        if (isEnabled !== undefined) {
-            this.teamsEnabledSelectControl.change(isEnabled ? '1' : '0');
-        }
-        return this.settingSelectorEnabled('#openassessment_team_enabled_selector', isEnabled);
-    },
+    * */
+  teamsEnabled(isEnabled) {
+    if (isEnabled !== undefined) {
+      this.teamsEnabledSelectControl.change(isEnabled ? '1' : '0');
+    }
+    return this.settingSelectorEnabled('#openassessment_team_enabled_selector', isEnabled);
+  }
 
-    /**
-     * Hide elements, including setting the aria-hidden attribute for screen readers.
-     *
-     * @param {JQuery.selector} selector - The selector matching the elements to hide.
-     * @param {boolean} hidden - Whether to hide or show the elements.
-     */
-    setHidden: function(selector, hidden) {
-        selector.toggleClass('is--hidden', hidden);
-        selector.attr('aria-hidden', hidden ? 'true' : 'false');
-    },
-
-    /**
+  /**
      * Check whether elements are hidden.
      *
      * @param {JQuery.selector} selector - The selector matching the elements to check.
      * @return {boolean} - True if all the elements are hidden, else false.
      */
-    isHidden: function(selector) {
-        return selector.hasClass('is--hidden') && selector.attr('aria-hidden') === 'true';
-    },
+  isHidden(selector) {
+    return selector.hasClass('is--hidden') && selector.attr('aria-hidden') === 'true';
+  }
 
-    /**
+  /**
+     * Hide elements, including setting the aria-hidden attribute for screen readers.
+     *
+     * @param {JQuery.selector} selector - The selector matching the elements to hide.
+     * @param {boolean} hidden - Whether to hide or show the elements.
+     */
+  setHidden(selector, hidden) {
+    selector.toggleClass('is--hidden', hidden);
+    selector.attr('aria-hidden', hidden ? 'true' : 'false');
+  }
+
+  /**
     Get or set the teamset.
 
     Args:
@@ -356,19 +400,20 @@ OpenAssessment.EditSettingsView.prototype = {
     Returns:
         string (teamset)
 
-    **/
-    teamset: function(teamsetIdentifier) {
-        if (this.teamsEnabled()) {
-            var sel = $('#openassessment_teamset_selector', this.settingsElement);
-            if (teamsetIdentifier !== undefined) {
-                sel.val(teamsetIdentifier);
-            }
-            return sel.val();
-        }
+    * */
+  teamset(teamsetIdentifier) {
+    if (this.teamsEnabled()) {
+      const sel = $('#openassessment_teamset_selector', this.settingsElement);
+      if (teamsetIdentifier !== undefined) {
+        sel.val(teamsetIdentifier);
+      }
+      return sel.val();
+    }
 
-        return '';
-    },
-    /**
+    return '';
+  }
+
+  /**
     Get or set the number of scores to show in the leaderboard.
     If set to 0, the leaderboard will not be shown.
 
@@ -378,155 +423,80 @@ OpenAssessment.EditSettingsView.prototype = {
     Returns:
         int
 
-    **/
-    leaderboardNum: function(num) {
-        if (num !== undefined) {
-            this.leaderboardIntField.set(num);
-        }
-        return this.leaderboardIntField.get(num);
-    },
+    * */
+  leaderboardNum(num) {
+    if (num !== undefined) {
+      this.leaderboardIntField.set(num);
+    }
+    return this.leaderboardIntField.get(num);
+  }
 
-    /**
-    Construct a list of enabled assessments and their properties.
+  /**
+    Enable / disable showing learners the assessment rubric while working on their response.
 
-
+    Args:
+        isEnabled(boolean, optional): if provided enable/disable showing the rubric
     Returns:
-        list of object literals representing the assessments.
+        boolean
+     * */
+  showRubricDuringResponse(isEnabled) {
+    return this.settingSelectorEnabled('#openassessment_show_rubric_during_response_selector', isEnabled);
+  }
 
-    Example usage:
-    >>> editSettingsView.assessmentsDescription()
-    [
-        {
-            name: "peer-assessment",
-            start: "2014-04-01T00:00",
-            due: null
-            must_grade: 5,
-            must_be_graded_by: 2,
-        },
-        {
-            name: "self-assessment",
-            start: null,
-            due: null
-        }
-    ]
-    **/
-    assessmentsDescription: function() {
-        var assessmentDescList = [];
-        var view = this;
-
-        // Find all assessment modules within our element in the DOM,
-        // and append their definitions to the description
-        $('.openassessment_assessment_module_settings_editor', this.assessmentsElement).each(
-            function() {
-                var asmntView = view.assessmentViews[$(this).attr('id')];
-                var isVisible = !view.isHidden($(asmntView.element));
-
-                if (asmntView.isEnabled() && isVisible) {
-                    var description = asmntView.description();
-                    description.name = asmntView.name;
-                    assessmentDescList.push(description);
-                }
-            }
-        );
-        return assessmentDescList;
-    },
-
-    /**
-    Retrieve the names of all assessments in the editor,
-    in the order that the user defined,
-    including assessments that are not currently active.
-
-    Returns:
-        list of strings
-
-    **/
-    editorAssessmentsOrder: function() {
-        var editorAssessments = [];
-        var view = this;
-        $('.openassessment_assessment_module_settings_editor', this.assessmentsElement).each(
-            function() {
-                var asmntView = view.assessmentViews[$(this).attr('id')];
-                editorAssessments.push(asmntView.name);
-            }
-        );
-        return editorAssessments;
-    },
-
-    /**
+  /**
     Mark validation errors.
 
     Returns:
         Boolean indicating whether the view is valid.
 
-    **/
-    validate: function() {
-        // Validate the start and due datetime controls
-        var isValid = true;
+    * */
+  validate() {
+    // Validate the start and due datetime controls
+    let isValid = true;
 
-        isValid = (this.startDatetimeControl.validate() && isValid);
-        isValid = (this.dueDatetimeControl.validate() && isValid);
-        isValid = (this.leaderboardIntField.validate() && isValid);
-        if (this.fileUploadType() === 'custom') {
-            isValid = (this.fileTypeWhiteListInputField.validate() && isValid);
-        } else {
-            // we want to keep the valid white list in case author changes upload type back to custom
-            if (this.fileTypeWhiteListInputField.get() && !this.fileTypeWhiteListInputField.validate()) {
-                // but will clear the field in case it is invalid
-                this.fileTypeWhiteListInputField.set('');
-            }
-        }
+    isValid = (this.leaderboardIntField.validate() && isValid);
+    if (this.fileUploadType() === 'custom') {
+      isValid = (this.fileTypeWhiteListInputField.validate() && isValid);
+    } else {
+      // we want to keep the valid white list in case author changes upload type back to custom
+      /* eslint-disable-next-line no-lonely-if */
+      if (this.fileTypeWhiteListInputField.get() && !this.fileTypeWhiteListInputField.validate()) {
+        // but will clear the field in case it is invalid
+        this.fileTypeWhiteListInputField.set('');
+      }
+    }
 
-        // Validate each of the *enabled* assessment views
-        $.each(this.assessmentViews, function() {
-            if (this.isEnabled()) {
-                isValid = (this.validate() && isValid);
-            }
-        });
+    return isValid;
+  }
 
-        return isValid;
-    },
-
-    /**
+  /**
     Return a list of validation errors visible in the UI.
     Mainly useful for testing.
 
     Returns:
         list of string
 
-    **/
-    validationErrors: function() {
-        var errors = [];
+    * */
+  validationErrors() {
+    let errors = [];
 
-        if (this.startDatetimeControl.validationErrors().length > 0) {
-            errors.push('Submission start is invalid');
-        }
-        if (this.dueDatetimeControl.validationErrors().length > 0) {
-            errors.push('Submission due is invalid');
-        }
-        if (this.leaderboardIntField.validationErrors().length > 0) {
-            errors.push('Leaderboard number is invalid');
-        }
-        if (this.fileTypeWhiteListInputField.validationErrors().length > 0) {
-            errors = errors.concat(this.fileTypeWhiteListInputField.validationErrors());
-        }
+    if (this.leaderboardIntField.validationErrors().length > 0) {
+      errors.push('Leaderboard number is invalid');
+    }
+    if (this.fileTypeWhiteListInputField.validationErrors().length > 0) {
+      errors = errors.concat(this.fileTypeWhiteListInputField.validationErrors());
+    }
 
-        $.each(this.assessmentViews, function() {
-            errors = errors.concat(this.validationErrors());
-        });
+    return errors;
+  }
 
-        return errors;
-    },
-
-    /**
+  /**
     Clear all validation errors from the UI.
-    **/
-    clearValidationErrors: function() {
-        this.startDatetimeControl.clearValidationErrors();
-        this.dueDatetimeControl.clearValidationErrors();
-        this.leaderboardIntField.clearValidationErrors();
-        this.fileTypeWhiteListInputField.clearValidationErrors();
-        $.each(this.assessmentViews, function() {
-            this.clearValidationErrors();
-        });
-    },
-};
+    * */
+  clearValidationErrors() {
+    this.leaderboardIntField.clearValidationErrors();
+    this.fileTypeWhiteListInputField.clearValidationErrors();
+  }
+}
+
+export default EditSettingsView;

@@ -1,8 +1,8 @@
 """ Tests for ORA workflow models """
+from unittest import mock
 
 from contextlib import contextmanager
 import ddt
-import mock
 from freezegun import freeze_time
 
 from django.utils.timezone import now
@@ -52,7 +52,7 @@ class TeamAssessmentTest(CacheResetTest):
             team_workflow = TeamAssessmentWorkflow.start_workflow(self.team_submission_uuid)
         self.assertEqual(team_workflow.team_submission_uuid, self.team_submission_uuid)
         self.assertIn(team_workflow.submission_uuid, self.submission_uuids)
-        self.assertEqual(team_workflow.status, TeamAssessmentWorkflow.STATUS.teams)
+        self.assertEqual(team_workflow.status, TeamAssessmentWorkflow.STATUS.waiting)
         self.assertEqual(team_workflow.course_id, self.course_id)
         self.assertEqual(team_workflow.item_id, self.item_id)
 

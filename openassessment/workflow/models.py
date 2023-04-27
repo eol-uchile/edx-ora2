@@ -9,7 +9,7 @@ need to then generate a matching migration for it using:
     ./manage.py schemamigration openassessment.workflow --auto
 
 """
-from __future__ import absolute_import, unicode_literals
+
 
 import importlib
 import logging
@@ -18,7 +18,6 @@ from uuid import uuid4
 from django.conf import settings
 from django.db import DatabaseError, models, transaction
 from django.dispatch import receiver
-from django.utils.encoding import python_2_unicode_compatible
 from django.utils.timezone import now
 
 from model_utils import Choices
@@ -39,9 +38,9 @@ logger = logging.getLogger('openassessment.workflow.models')  # pylint: disable=
 # that implements the corresponding assessment API.
 # For backwards compatibility, we provide a default configuration as well
 DEFAULT_ASSESSMENT_API_DICT = {
-    u'peer': 'openassessment.assessment.api.peer',
-    u'self': 'openassessment.assessment.api.self',
-    u'training': 'openassessment.assessment.api.student_training',
+    'peer': 'openassessment.assessment.api.peer',
+    'self': 'openassessment.assessment.api.self',
+    'training': 'openassessment.assessment.api.student_training',
 }
 ASSESSMENT_API_DICT = getattr(
     settings, 'ORA2_ASSESSMENTS',
@@ -70,9 +69,9 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
         # User has done all necessary assessment but hasn't been
         # graded yet -- we're waiting for assessments of their
         # submission by others.
-        u"waiting",
-        u"done",  # Complete
-        u"cancelled"  # User submission has been cancelled.
+        "waiting",
+        "done",  # Complete
+        "cancelled"  # User submission has been cancelled.
     ]
 
     STATUS_VALUES = STEPS + STATUSES
@@ -110,7 +109,7 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
         app_label = "workflow"
 
     def __init__(self, *args, **kwargs):
-        super(AssessmentWorkflow, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         if 'staff' not in AssessmentWorkflow.STEPS:
             new_list = ['staff']
             new_list.extend(AssessmentWorkflow.STEPS)
@@ -227,6 +226,10 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
         workflow is a key, and each key maps to a dictionary defining whether
         the step is complete (submitter requirements fulfilled) and graded (the
         submission has been assessed).
+
+        For the 'peer' step there will be extra keys in its mapped dictionary:
+        - 'peers_graded_count': how many peers the submitter has assessed
+        - 'graded_by_count': how many peers the submitter been assessed by
         """
         status_dict = {}
         steps = self._get_steps()
@@ -234,7 +237,14 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
             status_dict[step.name] = {
                 "complete": step.is_submitter_complete(),
                 "graded": step.is_assessment_complete(),
+                "skipped": step.skipped
             }
+            if step.name == 'peer':
+                # the number passed here is arbitrary and ignored
+                _, peers_graded_count = step.api().has_finished_required_evaluating(self.submission_uuid, 1)
+                graded_by_count = step.api().get_graded_by_count(self.submission_uuid)
+                status_dict[step.name]['peers_graded_count'] = peers_graded_count
+                status_dict[step.name]['graded_by_count'] = graded_by_count
         return status_dict
 
     def get_score(self, assessment_requirements, step_for_name):
@@ -284,10 +294,17 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
         If the status is done, we do nothing. Once something is done, we never
         move back to any other status.
 
-        If an assessment API says that our submitter's requirements are met,
-        then move to the next assessment.  For example, in peer assessment,
-        if the submitter we're tracking has assessed the required number
-        of submissions, they're allowed to continue.
+        If an assessment API says that our submitter's requirements are met, or if
+        current assessment step can be skipped, then move to the next assessment.
+        For example, in student training, if the submitter we're tracking has completed
+        the training, they're allowed to continue. Whereas in peer assessment, it is
+        allowed to skip that step so we mark it as started and move to the next assessment.
+        So all skippable steps are in progress until completed. But user can complete
+        next steps before those skippable ones.
+
+        For every possible assessments, we find out all skippable assessments and mark
+        them as skipped and consider that step already started (calling `on_start` for
+        that assessmet api). Then choose the next un-skippable step as current step.
 
         If the submitter has finished all the assessments, then we change
         their status to `waiting`.
@@ -338,9 +355,11 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
                 # Set the staff score using submissions api, and log that fact
                 self.set_staff_score(new_staff_score)
                 self.save()
-                logger.info((
-                    "Workflow for submission UUID {uuid} has updated score using {staff_type} assessment."
-                ).format(uuid=self.submission_uuid, staff_type=self.STAFF_STEP_NAME))
+                logger.info(
+                    "Workflow for submission UUID %s has updated score using %s assessment.",
+                    self.submission_uuid,
+                    self.STAFF_STEP_NAME
+                )
 
                 # Update the assessment_completed_at field for all steps
                 # All steps are considered "assessment complete", as the staff score will override all
@@ -358,9 +377,40 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
         for step in steps:
             step.update(self.submission_uuid, assessment_requirements)
 
-        # Fetch name of the first step that the submitter hasn't yet completed.
+        possible_statuses = []
+        skipped_statuses = []
+        all_statuses = []
+
+        # find which are the next unskippable steps and steps that can be skipped
+        for step in steps:
+            all_statuses.append(step.name)
+            if step.submitter_completed_at is None:
+                if step.can_skip(self.submission_uuid, assessment_requirements):
+                    skipped_statuses.append(step.name)
+                else:
+                    possible_statuses.append(step.name)
+
+        # if there is no unskippable steps and only skippable steps left
+        # then consider 1st skippable step as unskippable
+        if len(possible_statuses) == 0 and len(skipped_statuses) > 0:
+            unskip_step = skipped_statuses.pop()
+            possible_statuses.append(unskip_step)
+            if step_for_name.get(unskip_step):
+                step_for_name[unskip_step].unskip()
+
+        # mark skippable step as skipped only if current it's the current step
+        # this prevent skipping a step too early
+        for step_name in skipped_statuses:
+            skip_step = step_for_name.get(step_name)
+            if skip_step:
+                # skip when its the current status or were before than current status
+                if self.status in all_statuses and all_statuses.index(self.status) >= all_statuses.index(step_name):
+                    skip_step.skip()
+                    # skiping an assessment step should also start it
+                    skip_step.start(self.submission_uuid)
+
         new_status = next(
-            (step.name for step in steps if step.submitter_completed_at is None),
+            iter(possible_statuses),
             self.STATUS.waiting  # if nothing's left to complete, we're waiting
         )
 
@@ -368,9 +418,7 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
         # appropriate assessment API.
         new_step = step_for_name.get(new_status)
         if new_step is not None:
-            on_start_func = getattr(new_step.api(), 'on_start', None)
-            if on_start_func is not None:
-                on_start_func(self.submission_uuid)
+            new_step.start(self.submission_uuid)
 
         # If the submitter has done all they need to do, let's check to see if
         # all steps have been fully assessed (i.e. we can score it).
@@ -387,9 +435,11 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
         if self.status != new_status:
             self.status = new_status
             self.save()
-            logger.info((
-                u"Workflow for submission UUID {uuid} has updated status to {status}"
-            ).format(uuid=self.submission_uuid, status=new_status))
+            logger.info(
+                "Workflow for submission UUID %s has updated status to %s",
+                self.submission_uuid,
+                new_status
+            )
 
     def _get_steps(self):
         """
@@ -408,7 +458,7 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
                 assessment_completed_at=now(),
                 workflow=self,
             )
-            self.steps.add(
+            self.steps.add(  # pylint: disable=no-member
                 staff_step
             )
 
@@ -417,7 +467,7 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
         if not steps:
             # If no steps exist for this AssessmentWorkflow, assume
             # peer -> self for backwards compatibility, with an optional staff override
-            self.steps.add(
+            self.steps.add(  # pylint: disable=no-member
                 AssessmentWorkflowStep(name=self.STATUS.staff, order_num=0, assessment_completed_at=now()),
                 AssessmentWorkflowStep(name=self.STATUS.peer, order_num=1),
                 AssessmentWorkflowStep(name=self.STATUS.self, order_num=2)
@@ -520,7 +570,7 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
         try:
             score = self.get_score(assessment_requirements, step_for_name)
         except AssessmentError as exc:
-            logger.info("TNL-5799, exception in get_score during cancellation. {}".format(exc))
+            logger.info("TNL-5799, exception in get_score during cancellation. %s", exc)
             score = None
 
         # Set the points_earned to 0.
@@ -533,9 +583,9 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
             self.status = self.STATUS.cancelled
             self.save()
             logger.info(
-                u"Workflow for submission UUID {uuid} has updated status to {status}".format(
-                    uuid=self.submission_uuid, status=self.STATUS.cancelled
-                )
+                "Workflow for submission UUID %s has updated status to %s",
+                self.submission_uuid,
+                self.STATUS.cancelled
             )
 
     @classmethod
@@ -564,15 +614,15 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
             AssessmentWorkflowCancellation.create(workflow=workflow, comments=comments, cancelled_by_id=cancelled_by_id)
             # Cancel the related step's workflow.
             workflow.cancel(assessment_requirements)
-        except (cls.DoesNotExist, cls.MultipleObjectsReturned):
-            error_message = u"Error finding workflow for submission UUID {}.".format(submission_uuid)
+        except (cls.DoesNotExist, cls.MultipleObjectsReturned) as ex:
+            error_message = f"Error finding workflow for submission UUID {submission_uuid}."
             logger.exception(error_message)
-            raise AssessmentWorkflowError(error_message)
-        except DatabaseError:
-            error_message = u"Error creating assessment workflow cancellation for submission UUID {}.".format(
+            raise AssessmentWorkflowError(error_message) from ex
+        except DatabaseError as ex:
+            error_message = "Error creating assessment workflow cancellation for submission UUID {}.".format(
                 submission_uuid)
             logger.exception(error_message)
-            raise AssessmentWorkflowInternalError(error_message)
+            raise AssessmentWorkflowInternalError(error_message) from ex
 
     @classmethod
     def get_by_submission_uuid(cls, submission_uuid):
@@ -598,9 +648,9 @@ class AssessmentWorkflow(TimeStampedModel, StatusModel):
         except cls.DoesNotExist:
             return None
         except DatabaseError as exc:
-            message = u"Error finding workflow for submission UUID {} due to error: {}.".format(submission_uuid, exc)
+            message = f"Error finding workflow for submission UUID {submission_uuid} due to error: {exc}."
             logger.exception(message)
-            raise AssessmentWorkflowError(message)
+            raise AssessmentWorkflowError(message) from exc
 
     @property
     def is_cancelled(self):
@@ -650,19 +700,19 @@ class TeamAssessmentWorkflow(AssessmentWorkflow):
                 "Error finding workflow for team submission UUID {uuid} due to error: {exc}."
             ).format(uuid=team_submission_uuid, exc=exc)
             logger.exception(message)
-            raise AssessmentWorkflowError(message)
+            raise AssessmentWorkflowError(message) from exc
 
     @classmethod
     @transaction.atomic
-    def start_workflow(cls, team_submission_uuid):  # pylint: disable=arguments-differ
+    def start_workflow(cls, team_submission_uuid):  # pylint: disable=arguments-differ, arguments-renamed
         """ Start a team workflow """
         team_submission_dict = sub_team_api.get_team_submission(team_submission_uuid)
         try:
             referrence_learner_submission_uuid = team_submission_dict['submission_uuids'][0]
-        except IndexError:
-            msg = 'No individual submission found for team submisison uuid {}'.format(team_submission_uuid)
+        except IndexError as ex:
+            msg = f'No individual submission found for team submisison uuid {team_submission_uuid}'
             logger.exception(msg)
-            raise AssessmentWorkflowInternalError(msg)
+            raise AssessmentWorkflowInternalError(msg) from ex
 
         # Create the workflow in the database
         # For now, set the status to waiting; we'll modify it later
@@ -680,9 +730,6 @@ class TeamAssessmentWorkflow(AssessmentWorkflow):
 
         team_assessment_api = team_staff_step.api()
         team_assessment_api.on_init(team_submission_uuid)
-
-        team_workflow.status = TeamAssessmentWorkflow.STATUS.teams
-        team_workflow.save()
 
         return team_workflow
 
@@ -704,7 +751,7 @@ class TeamAssessmentWorkflow(AssessmentWorkflow):
             )
             logger.error(err_msg)
             raise AssessmentWorkflowInternalError(err_msg)
-        step = self.steps.first()
+        step = self.steps.first()  # pylint: disable=no-member
         if step.name != TeamAssessmentWorkflow.STATUS.teams:
             err_msg = 'Team Assessment Workflow {} has a "{}" step rather than a teams step'.format(
                 self.uuid,
@@ -714,7 +761,8 @@ class TeamAssessmentWorkflow(AssessmentWorkflow):
             raise AssessmentWorkflowInternalError(err_msg)
         return [step]
 
-    def update_from_assessments(self):  # pylint: disable=arguments-differ
+    def update_from_assessments(self, override_submitter_requirements=False):
+        # pylint: disable=arguments-differ, arguments-renamed
         """
         Update the workflow with potential new scores from assessments.
         """
@@ -736,13 +784,16 @@ class TeamAssessmentWorkflow(AssessmentWorkflow):
                 # Set the team staff score using team submissions api, and log that fact
                 self._set_team_staff_score(new_score)
                 self.save()
-                logger.info((
-                    "Team Workflow for team submission UUID {uuid} has updated score using team staff assessment."
-                ).format(uuid=self.team_submission_uuid))
-
-                team_staff_step.assessment_completed_at = now()
+                logger.info(
+                    "Team Workflow for team submission UUID %s has updated score using team staff assessment.",
+                    self.team_submission_uuid
+                )
+                common_now = now()
+                team_staff_step.assessment_completed_at = common_now
                 team_staff_step.save()
 
+            if override_submitter_requirements:
+                team_staff_step.submitter_completed_at = common_now
             team_staff_step.update(self.team_submission_uuid, self.REQUIREMENTS)
             self.status = self.STATUS.done
             self.save()
@@ -783,6 +834,7 @@ class AssessmentWorkflowStep(models.Model):
     submitter_completed_at = models.DateTimeField(default=None, null=True)
     assessment_completed_at = models.DateTimeField(default=None, null=True)
     order_num = models.PositiveIntegerField()
+    skipped = models.BooleanField(default=False, null=True)
 
     staff_step_types = [AssessmentWorkflow.STAFF_STEP_NAME, TeamAssessmentWorkflow.TEAM_STAFF_STEP_NAME]
 
@@ -806,6 +858,30 @@ class AssessmentWorkflowStep(models.Model):
     def is_staff_step(self):
         return self.name in self.staff_step_types
 
+    def can_skip(self, submission_uuid, assessment_requirements):
+        if assessment_requirements is None:
+            step_reqs = None
+        else:
+            step_reqs = assessment_requirements.get(self.name)
+
+        can_be_skipped = getattr(self.api(), 'can_be_skipped', lambda sid, reqs: False)
+        return can_be_skipped(submission_uuid, step_reqs)
+
+    def skip(self):
+        if not self.skipped:
+            self.skipped = True
+            self.save()
+
+    def start(self, submission_uuid):
+        on_start_func = getattr(self.api(), 'on_start', None)
+        if on_start_func is not None:
+            on_start_func(submission_uuid)
+
+    def unskip(self):
+        if self.skipped:
+            self.skipped = False
+            self.save()
+
     def api(self):
         """
         Returns an API associated with this workflow step. If no API is
@@ -827,19 +903,19 @@ class AssessmentWorkflowStep(models.Model):
             elif self.name == TeamAssessmentWorkflow.TEAM_STAFF_STEP_NAME:
                 api_path = 'openassessment.assessment.api.teams'
             else:
-                raise AssessmentWorkflowInternalError('Staff step type {} has no associated api'.format(self.name))
+                raise AssessmentWorkflowInternalError(f'Staff step type {self.name} has no associated api')
         if api_path is not None:
             try:
                 return importlib.import_module(api_path)
-            except (ImportError, ValueError):
-                raise AssessmentApiLoadError(self.name, api_path)
+            except (ImportError, ValueError) as ex:
+                raise AssessmentApiLoadError(self.name, api_path) from ex
         else:
             # It's possible for the database to contain steps for APIs
             # that are not configured -- for example, if a new assessment
             # type is added, then the code is rolled back.
             msg = (
-                u"No assessment configured for '{name}'.  "
-                u"Check the ORA2_ASSESSMENTS Django setting."
+                "No assessment configured for '{name}'.  "
+                "Check the ORA2_ASSESSMENTS Django setting."
             ).format(name=self.name)
             logger.warning(msg)
             return None
@@ -859,7 +935,9 @@ class AssessmentWorkflowStep(models.Model):
         else:
             step_reqs = assessment_requirements.get(self.name, {})
 
-        default_finished = lambda submission_uuid, step_reqs: True
+        def default_finished(*args):
+            return True
+
         submitter_finished = getattr(self.api(), 'submitter_is_finished', default_finished)
         assessment_finished = getattr(self.api(), 'assessment_is_finished', default_finished)
 
@@ -903,23 +981,22 @@ def update_workflow_async(sender, **kwargs):  # pylint: disable=unused-argument
         workflow = AssessmentWorkflow.objects.get(submission_uuid=submission_uuid)
         workflow.update_from_assessments(None)
     except AssessmentWorkflow.DoesNotExist:
-        msg = u"Could not retrieve workflow for submission with UUID {}".format(submission_uuid)
+        msg = f"Could not retrieve workflow for submission with UUID {submission_uuid}"
         logger.exception(msg)
     except DatabaseError:
         msg = (
-            u"Database error occurred while updating "
-            u"the workflow for submission UUID {}"
+            "Database error occurred while updating "
+            "the workflow for submission UUID {}"
         ).format(submission_uuid)
         logger.exception(msg)
     except Exception:  # pylint: disable=broad-except
         msg = (
-            u"Unexpected error occurred while updating the workflow "
-            u"for submission UUID {}"
+            "Unexpected error occurred while updating the workflow "
+            "for submission UUID {}"
         ).format(submission_uuid)
         logger.exception(msg)
 
 
-@python_2_unicode_compatible
 class AssessmentWorkflowCancellation(models.Model):
     """Model for tracking cancellations of assessment workflow.
 

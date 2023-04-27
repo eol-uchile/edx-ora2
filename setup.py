@@ -1,10 +1,12 @@
 #!/usr/bin/env python
-from __future__ import absolute_import
 
+import os
+import re
 import os.path
 from io import open as open_as_of_py3
+import os.path
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 README = open_as_of_py3(
     os.path.join(os.path.dirname(__file__), 'README.rst')
@@ -34,9 +36,24 @@ def load_requirements(*requirements_paths):
     return list(requirements)
 
 
+def get_version(*file_paths):
+    """
+    Extract the version string from the file at the given relative path fragments.
+    """
+    filename = os.path.join(os.path.dirname(__file__), *file_paths)
+    version_file = open(filename).read()
+    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", version_file, re.M)
+    if version_match:
+        return version_match.group(1)
+    raise RuntimeError("Unable to find version string.")
+
+
+VERSION = get_version("openassessment", "__init__.py")
+
+
 setup(
     name='ora2',
-    version='2.7.11',
+    version=VERSION,
     author='edX',
     author_email='oscm@edx.org',
     url='http://github.com/edx/edx-ora2',
@@ -46,12 +63,11 @@ setup(
     long_description_content_type='text/x-rst',
     classifiers=[
         'Development Status :: 5 - Production/Stable',
-        'Framework :: Django :: 2.2',
+        'Framework :: Django :: 3.2',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: GNU Affero General Public License v3',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.8',
     ],
     packages=find_packages(include=['openassessment*'], exclude=['*.test', '*.tests']),

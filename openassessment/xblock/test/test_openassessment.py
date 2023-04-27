@@ -1,23 +1,22 @@
 """
 Tests the Open Assessment XBlock functionality.
 """
-from __future__ import absolute_import
-
 from collections import namedtuple
 import datetime as dt
+from io import StringIO
 import json
+from unittest import mock
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from django.test.utils import override_settings
 
 import ddt
-from mock import MagicMock, Mock, PropertyMock, patch
 import pytz
-import six
-from six import StringIO
 
 from freezegun import freeze_time
 from lxml import etree
 from openassessment.workflow.errors import AssessmentWorkflowError
 from openassessment.xblock import openassessmentblock
-from openassessment.xblock.resolve_dates import DISTANT_FUTURE, DISTANT_PAST
+from openassessment.xblock.resolve_dates import DateValidationError, DISTANT_FUTURE, DISTANT_PAST
 
 from .base import XBlockHandlerTestCase, scenario
 
@@ -99,6 +98,72 @@ class TestOpenAssessment(XBlockHandlerTestCase):
         self.assertIn("openassessment__staff-area-unavailable", body_html)
 
     @scenario('data/basic_scenario.xml')
+    def test__create_ui_models(self, xblock):
+        # default assessments from the rubric include peer and self assessments.
+        # always include grade and submission.
+        # assessments from rubric are loaded into the ui model.
+        models = xblock._create_ui_models()  # pylint: disable=protected-access
+        self.assertEqual(len(models), 4)
+        UI_MODELS = openassessmentblock.UI_MODELS
+        self.assertEqual(models[0], UI_MODELS["submission"])
+        self.assertEqual(models[1], dict(
+            xblock.rubric_assessments[0],
+            **UI_MODELS["peer-assessment"]
+        ))
+        self.assertEqual(models[2], dict(
+            xblock.rubric_assessments[1],
+            **UI_MODELS["self-assessment"]
+        ))
+        self.assertEqual(models[3], UI_MODELS["grade"])
+
+    @scenario('data/basic_scenario.xml')
+    def test__create_ui_models__teams_enabled(self, xblock):
+        # peer and self assessment types are not included in VALID_ASSESSMENT_TYPES_FOR_TEAMS
+        xblock.teams_enabled = True
+        models = xblock._create_ui_models()  # pylint: disable=protected-access
+        self.assertEqual(len(models), 2)
+        UI_MODELS = openassessmentblock.UI_MODELS
+        self.assertEqual(models[0], UI_MODELS["submission"])
+        self.assertEqual(models[1], UI_MODELS["grade"])
+
+    @scenario('data/basic_scenario.xml')
+    def test__create_ui_models__leaderboard(self, xblock):
+        # if leaderboard_show is > 0, append leaderboard
+        xblock.leaderboard_show = 10
+        models = xblock._create_ui_models()  # pylint: disable=protected-access
+        self.assertEqual(len(models), 5)
+        UI_MODELS = openassessmentblock.UI_MODELS
+        self.assertEqual(models[0], UI_MODELS["submission"])
+        self.assertEqual(models[1], dict(
+            xblock.rubric_assessments[0],
+            **UI_MODELS["peer-assessment"]
+        ))
+        self.assertEqual(models[2], dict(
+            xblock.rubric_assessments[1],
+            **UI_MODELS["self-assessment"]
+        ))
+        self.assertEqual(models[3], UI_MODELS["grade"])
+        self.assertEqual(models[4], UI_MODELS["leaderboard"])
+
+    @scenario('data/basic_scenario.xml')
+    def test__create_ui_models__no_leaderboard_if_teams_enabled(self, xblock):
+        # do not show leaderboard in teams ORAS, even if leaderboard_show is set.
+        xblock.leaderboard_show = 10
+        xblock.teams_enabled = True
+        models = xblock._create_ui_models()  # pylint: disable=protected-access
+        self.assertEqual(len(models), 2)
+        UI_MODELS = openassessmentblock.UI_MODELS
+        self.assertEqual(models[0], UI_MODELS["submission"])
+        self.assertEqual(models[1], UI_MODELS["grade"])
+
+    @scenario('data/basic_scenario.xml')
+    @override_settings(
+        ORA_GRADING_MICROFRONTEND_URL='some_url'
+    )
+    @patch(
+        'openassessment.xblock.config_mixin.ConfigMixin.is_enhanced_staff_grader_enabled',
+        PropertyMock(return_value=False)
+    )
     def test_ora_blocks_listing_view(self, xblock):
         """
         Test view for listing all courses OA blocks.
@@ -145,13 +210,40 @@ class TestOpenAssessment(XBlockHandlerTestCase):
         items = json.loads(scripts[0].text)
         self.assertEqual(items, defined_ora_items)
 
+    @scenario('data/basic_scenario.xml')
+    @override_settings(
+        ORA_GRADING_MICROFRONTEND_URL='some_url'
+    )
+    @ddt.data(False, True)
+    @patch(
+        'openassessment.xblock.config_mixin.ConfigMixin.is_enhanced_staff_grader_enabled',
+        new_callable=PropertyMock
+    )
+    def test_ora_blocks_listing_view_include_esg_flag(self, xblock, esg_flag_input, mock_esg):
+        """
+        Test view for listing all courses OA blocks.
+        """
+        mock_esg.return_value = esg_flag_input
+        xblock_fragment = self.runtime.render(xblock, "ora_blocks_listing_view")
+        body_html = xblock_fragment.body_html()
+
+        self.assertIn("CourseOpenResponsesListingBlock", body_html)
+
+        parser = etree.HTMLParser()
+        tree = etree.parse(StringIO(body_html), parser)
+
+        xblock_arg_path = "//script[contains(@type, 'json/xblock-args')]"
+
+        xblock_args_el = tree.xpath(xblock_arg_path)
+        json.loads(xblock_args_el[0].text)['CONTEXT']['ENHANCED_STAFF_GRADER'] = esg_flag_input
+
     @scenario('data/empty_prompt.xml')
     def test_prompt_intentionally_empty(self, xblock):
         # Verify that prompts intentionally left empty don't create DOM elements
         xblock_fragment = self.runtime.render(xblock, "student_view")
         body_html = xblock_fragment.body_html()
         present_prompt_text = "you'll provide a response to the prompt"
-        missing_article = u'<article class="submission__answer__part__prompt'
+        missing_article = '<article class="submission__answer__part__prompt'
         self.assertIn(present_prompt_text, body_html)
         self.assertNotIn(missing_article, body_html)
 
@@ -170,7 +262,7 @@ class TestOpenAssessment(XBlockHandlerTestCase):
         with patch('openassessment.xblock.workflow_mixin.workflow_api') as mock_api:
             self.runtime.render(xblock, "student_view")
             expected_reqs = {
-                "peer": {"must_grade": 5, "must_be_graded_by": 3}
+                "peer": {"must_grade": 5, "must_be_graded_by": 3, "enable_flexible_grading": False}
             }
             mock_api.update_from_assessments.assert_called_once_with('test_submission', expected_reqs)
 
@@ -382,7 +474,7 @@ class TestOpenAssessment(XBlockHandlerTestCase):
     def test_default_fields(self, xblock):
 
         # Reset all fields in the XBlock to their default values
-        for field_name, field in six.iteritems(xblock.fields):
+        for field_name, field in xblock.fields.items():
             setattr(xblock, field_name, field.default)
 
         # Validate Submission Rendering.
@@ -395,7 +487,7 @@ class TestOpenAssessment(XBlockHandlerTestCase):
         # because that's what our models expect.
         student_item = xblock.get_student_item_dict()
         self.assertEqual(student_item['student_id'], '2')
-        self.assertIsInstance(student_item['item_id'], six.text_type)
+        self.assertIsInstance(student_item['item_id'], str)
 
     @scenario('data/basic_scenario.xml', user_id='Bob')
     def test_use_xmodule_runtime(self, xblock):
@@ -422,17 +514,52 @@ class TestOpenAssessment(XBlockHandlerTestCase):
         # Check that we can render the student view without error
         self.runtime.render(xblock, 'student_view')
 
+    @scenario('data/grade_scenario_self_staff.xml', user_id='Bob')
+    def test_assessment_type_with_staff(self, xblock):
+        # Check that staff-assessment is in assessment_steps
+        self.assertIn('staff-assessment', xblock.assessment_steps)
+
+        # Check that we can render the student view without error
+        self.runtime.render(xblock, 'student_view')
+
+    @scenario('data/grade_scenario_self_only.xml', user_id='Bob')
+    def test_assessment_type_without_staff(self, xblock):
+        # Check that staff-assessment is not in assessment_steps
+        self.assertNotIn('staff-assessment', xblock.assessment_steps)
+
+        # Check that we can render the student view without error
+        self.runtime.render(xblock, 'student_view')
+
+    @scenario('data/grade_scenario_self_staff_not_required.xml', user_id='Bob')
+    def test_assessment_type_with_staff_not_required(self, xblock):
+        # Check that staff-assessment is not in assessment_steps
+        self.assertNotIn('staff-assessment', xblock.assessment_steps)
+
+        # Check that we can render the student view without error
+        self.runtime.render(xblock, 'student_view')
+
+    @scenario('data/grade_scenario_self_staff_not_required.xml', user_id='Bob')
+    def test_assessment_type_with_staff_override(self, xblock):
+        # Override the staff_assessment_exists function to always return True
+        xblock.staff_assessment_exists = lambda submission_uuid: True
+
+        # Check that staff-assessment is in assessment_steps
+        self.assertIn('staff-assessment', xblock.assessment_steps)
+
+        # Check that we can render the student view without error
+        self.runtime.render(xblock, 'student_view')
+
     @scenario('data/basic_scenario.xml', user_id='Bob')
     def test_prompts_fields(self, xblock):
 
         self.assertEqual(xblock.prompts, [
             {
-                'description': (u'Given the state of the world today, what do you think should be done to '
-                                u'combat poverty? Please answer in a short essay of 200-300 words.')
+                'description': ('Given the state of the world today, what do you think should be done to '
+                                'combat poverty? Please answer in a short essay of 200-300 words.')
             },
             {
-                'description': (u'Given the state of the world today, what do you think should be done to '
-                                u'combat pollution?')
+                'description': ('Given the state of the world today, what do you think should be done to '
+                                'combat pollution?')
             }
         ])
 
@@ -484,6 +611,13 @@ class TestOpenAssessment(XBlockHandlerTestCase):
         xblock.file_upload_response_raw = None
         xblock.text_response_raw = 'optional'
         self.assertEqual(xblock.text_response, 'optional')
+
+    @scenario('data/custom_file_upload.xml')
+    def test_custom_file_upload_loads_file_allow_list(self, xblock):
+        """
+        Ensure that when an ORA w/ file uploads is loaded, it maintains its custom allowed file types
+        """
+        self.assertEqual(xblock.white_listed_file_types, ["pdf"])
 
 
 class TestDates(XBlockHandlerTestCase):
@@ -755,6 +889,18 @@ class TestDates(XBlockHandlerTestCase):
         xblock.runtime.modulestore.has_published_version.return_value = False
         self.assertFalse(xblock.is_released())
 
+    @scenario('data/basic_scenario.xml')
+    def test_is_released_invalid_date(self, xblock):
+        xblock.is_closed = mock.MagicMock(side_effect=DateValidationError)
+
+        # Published, should be released
+        self.assertTrue(xblock.is_released())
+
+        # Not published, should be not released
+        xblock.runtime.modulestore = MagicMock()
+        xblock.runtime.modulestore.has_published_version.return_value = False
+        self.assertFalse(xblock.is_released())
+
     @scenario('data/staff_dates_scenario.xml')
     def test_course_staff_dates(self, xblock):
 
@@ -916,3 +1062,57 @@ class TestDates(XBlockHandlerTestCase):
         xblock.xmodule_runtime.get_real_user.return_value = None
 
         self.assertIsNone(xblock.get_username('unknown_id'))
+
+
+class OpenAssessmentIndexingTestCase(XBlockHandlerTestCase):
+    """Tests indexibility of Open Assessment"""
+
+    @scenario('data/basic_scenario.xml')
+    def test_ora_indexibility_with_multiple_prompts(self, xblock):
+        result = xblock.index_dictionary()
+        content, content_type = result["content"], result["content_type"]
+        self.assertEqual(content_type, "ORA")
+        self.assertEqual(content["title"], "Open Assessment Test")
+        self.assertEqual(content["display_name"], "Open Response Assessment")
+        self.assertEqual(
+            [key.startswith("prompt") and content[key] != "" for key in content.keys()].count(True), 2
+        )
+
+    @scenario('data/empty_prompt.xml')
+    def test_ora_indexibility_with_no_prompt(self, xblock):
+        result = xblock.index_dictionary()
+        content, content_type = result["content"], result["content_type"]
+        self.assertEqual(content_type, "ORA")
+        self.assertEqual(content["title"], "Open Assessment Test")
+        self.assertEqual(content["display_name"], "Open Response Assessment")
+        self.assertEqual(content["prompt"], "")
+
+    @scenario('data/file_upload_missing_scenario.xml')
+    def test_ora_indexibility_with_single_prompt(self, xblock):
+        result = xblock.index_dictionary()
+        content, content_type = result["content"], result["content_type"]
+        self.assertEqual(content_type, "ORA")
+        self.assertEqual(
+            content["prompt"],
+            "Given the state of the world today, what do you think should be done to combat poverty? "
+            "Please answer in a short essay of 200-300 words."
+        )
+
+    @scenario('data/assessment_with_single_html_prompt.xml')
+    def test_ora_indexibility_with_single_html_prompt(self, xblock):
+        result = xblock.index_dictionary()
+        content, content_type = result["content"], result["content_type"]
+        self.assertEqual(content_type, "ORA")
+        self.assertEqual(content["title"], "Quiz about computers")
+        self.assertEqual(content["display_name"], "Open Response Assessment")
+        self.assertEqual(content["prompt"], "What is computer? It is a machine")
+
+    @scenario('data/assessment_with_multiple_html_prompt.xml')
+    def test_ora_indexibility_with_multiple_html_prompt(self, xblock):
+        result = xblock.index_dictionary()
+        content, content_type = result["content"], result["content_type"]
+        self.assertEqual(content_type, "ORA")
+        self.assertEqual(content["title"], "Quiz about computers")
+        self.assertEqual(content["display_name"], "Open Response Assessment")
+        self.assertEqual(content["prompt_0"], "What is computer? It is a machine")
+        self.assertEqual(content["prompt_1"], "Is it a calculator? Or is it a microwave")

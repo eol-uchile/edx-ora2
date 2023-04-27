@@ -1,3 +1,5 @@
+import BaseView from 'lms/oa_base';
+import StaffAreaView from 'lms/oa_staff_area';
 /**
  * Tests for OpenAssessment Student Training view.
  */
@@ -82,6 +84,7 @@ describe('OpenAssessment.StaffAreaView', function() {
     // Stubs
     var server = null;
     var runtime = {};
+    let baseView;
 
     /**
      * Create a staff area view.
@@ -98,15 +101,29 @@ describe('OpenAssessment.StaffAreaView', function() {
             server.staffAreaTemplate = staffAreaTemplate;
         }
         var assessmentElement = $('.openassessment').get(0);
-        var baseView = new OpenAssessment.BaseView(runtime, assessmentElement, server, {});
-        var view = new OpenAssessment.StaffAreaView(assessmentElement, server, baseView);
+        var data = {
+            AVAILABLE_EDITORS: {
+                'text': {
+                    'js': ['/base/js/src/lms/editors/oa_editor_textarea.js']
+                }
+            }
+        }
+        baseView = new BaseView(runtime, assessmentElement, server, data);
+        var view = baseView.staffAreaView;
         view.load();
         return view;
     };
 
     var createGradeAvailableResponsesView = function() {
         var assessmentElement = $('.openassessment').get(0);
-        var view = new OpenAssessment.BaseView(runtime, assessmentElement, server, {});
+        var data = {
+            AVAILABLE_EDITORS: {
+                'text': {
+                    'js': ['/base/js/src/lms/editors/oa_editor_textarea.js']
+                }
+            }
+        }
+        var view = new BaseView(runtime, assessmentElement, server, data);
         view.staffAreaView.installHandlers();
         return view;
     };
@@ -196,7 +213,7 @@ describe('OpenAssessment.StaffAreaView', function() {
 
         afterEach(function() {
             // Disable the unsaved page warnings (if set).
-            OpenAssessment.clearUnsavedChanges();
+            baseView.clearUnsavedChanges();
         });
 
         it('tracks unsubmitted assessments in multiple views', function() {
@@ -327,20 +344,36 @@ describe('OpenAssessment.StaffAreaView', function() {
         it('shows the correct buttons when full grading is not enabled', function() {
             var view = createStaffArea(),
                 $buttons = $('.ui-staff__button', view.element);
-            expect($buttons.length).toBe(2);
-            expect($buttons).toHaveAttr('aria-expanded', 'false');
-            expect($($buttons[0]).text().trim()).toEqual('Manage Individual Learners');
-            expect($($buttons[1]).text().trim()).toEqual('View Assignment Statistics');
-        });
-
-        it('shows the correct buttons for full grading', function() {
-            var view = createStaffArea({}, 'oa_staff_area_full_grading.html'),
-                $buttons = $('.ui-staff__button', view.element);
             expect($buttons.length).toBe(3);
             expect($buttons).toHaveAttr('aria-expanded', 'false');
             expect($($buttons[0]).text().trim()).toEqual('Manage Individual Learners');
             expect($($buttons[1]).text().trim()).toEqual('View Assignment Statistics');
-            expect($($buttons[2]).text().trim()).toEqual('Grade Available Responses');
+            expect($($buttons[2]).text().trim()).toEqual('View ORA in Studio');
+        });
+
+        describe('shows the correct buttons for full grading', function() {
+
+            it('when ora staff grader is enabled', function() {
+                var view = createStaffArea({}, 'oa_staff_area_full_grading_esg_enabled.html'),
+                $buttons = $('.ui-staff__button', view.element);
+                expect($buttons.length).toBe(4);
+                expect($buttons).toHaveAttr('aria-expanded', 'false');
+                expect($($buttons[0]).text().trim()).toEqual('Manage Individual Learners');
+                expect($($buttons[1]).text().trim()).toEqual('View Assignment Statistics');
+                expect($($buttons[2]).text().trim()).toEqual('Grade Available Responses');
+                expect($($buttons[3]).text().trim()).toEqual('View ORA in Studio');
+            });
+            it('when ora staff grader is disabled', function() {
+                var view = createStaffArea({}, 'oa_staff_area_full_grading_esg_disabled.html'),
+                $buttons = $('.ui-staff__button', view.element);
+                expect($buttons.length).toBe(5);
+                expect($buttons).toHaveAttr('aria-expanded', 'false');
+                expect($($buttons[0]).text().trim()).toEqual('Manage Individual Learners');
+                expect($($buttons[1]).text().trim()).toEqual('View Assignment Statistics');
+                expect($($buttons[2]).text().trim()).toEqual('Grade Available Responses');
+                expect($($buttons[3]).text().trim()).toEqual('Demo the new Grading Experience');
+                expect($($buttons[4]).text().trim()).toEqual('View ORA in Studio');
+            });
         });
 
         it('shows the "Manage Individual Learners" panel when the button is clicked', function() {
@@ -552,7 +585,7 @@ describe('OpenAssessment.StaffAreaView', function() {
 
             afterEach(function() {
                 // Disable the unsaved page warning (if set)
-                OpenAssessment.clearUnsavedChanges();
+                baseView.clearUnsavedChanges();
             });
 
             it('enables the submit button when all required fields are specified', function() {
@@ -670,7 +703,7 @@ describe('OpenAssessment.StaffAreaView', function() {
 
         afterEach(function() {
             // Disable the unsaved page warnings (if set).
-            OpenAssessment.clearUnsavedChanges();
+            baseView.clearUnsavedChanges();
         });
 
         it('hides the "Grade Available Responses" panel when the close button is clicked', function() {
@@ -730,13 +763,17 @@ describe('OpenAssessment.StaffAreaView', function() {
             verifyFocused($staffGradeButton[0]);
         });
 
+        const mockConfirmDialog = (shouldConfirm) => (_0, _1, confirmCallback, cancelCallback) => (
+            shouldConfirm ? confirmCallback() : cancelCallback()
+        );
+
         it('does not prompt submitter about submitting for individual assignments', function() {
             // Given an individual assignment
             var staffArea = createStaffArea({}, 'oa_staff_area_full_grading.html'),
                 $assessment;
             showInstructorAssessmentForm(staffArea);
 
-            var prompt = spyOn(staffArea, 'confirmSubmitGradeForTeam').and.callFake(function() {return false;});
+            var prompt = spyOn(staffArea.confirmDialog, 'confirm').and.callFake(mockConfirmDialog(false));
             var submit = spyOn(staffArea, 'submitStaffGrade').and.callThrough();
 
             // Fill in and click the button to submit and request another submission
@@ -757,7 +794,7 @@ describe('OpenAssessment.StaffAreaView', function() {
             showInstructorAssessmentForm(staffArea);
 
             // Mock the user accepting the prompt
-            var prompt = spyOn(staffArea, 'confirmSubmitGradeForTeam').and.callFake(function() {return true;});
+            var prompt = spyOn(staffArea.confirmDialog, 'confirm').and.callFake(mockConfirmDialog(true));
             var submit = spyOn(staffArea, 'submitStaffGrade').and.callThrough();
 
             // Fill in and click the button to submit and request another submission
@@ -778,7 +815,7 @@ describe('OpenAssessment.StaffAreaView', function() {
             showInstructorAssessmentForm(staffArea);
 
             // Mock the user cancelling the prompt
-            var prompt = spyOn(staffArea, 'confirmSubmitGradeForTeam').and.callFake(function() {return false;});
+            var prompt = spyOn(staffArea.confirmDialog, 'confirm').and.callFake(mockConfirmDialog(false));
             var submit = spyOn(staffArea, 'submitStaffGrade').and.callThrough();
 
             // Fill in and click the button to submit and request another submission

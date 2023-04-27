@@ -1,10 +1,12 @@
 """ Filesystem backend for file upload. """
-from __future__ import absolute_import
+
+
+from pathlib import Path
 
 from django.conf import settings
 import django.core.cache
 from django.urls import reverse
-from django.utils.encoding import smart_text
+from django.utils.encoding import smart_str
 
 from .. import exceptions
 from .base import BaseBackend
@@ -41,17 +43,27 @@ class Backend(BaseBackend):
         return self._get_url(key)
 
     def get_download_url(self, key):
-        make_download_url_available(self._get_key_name(key), self.DOWNLOAD_URL_TIMEOUT)
-        return self._get_url(key)
+        key_name = self._get_key_name(key)
+        if self._file_exists(key_name):
+            make_download_url_available(key_name, self.DOWNLOAD_URL_TIMEOUT)
+            return self._get_url(key)
+        return None
 
     def remove_file(self, key):
-        from openassessment.fileupload.views_filesystem import safe_remove, get_file_path
+        from openassessment.fileupload.views_filesystem import get_file_path, safe_remove
         return safe_remove(get_file_path(self._get_key_name(key)))
 
     def _get_url(self, key):
         key_name = self._get_key_name(key)
         url = reverse("openassessment-filesystem-storage", kwargs={'key': key_name})
         return url
+
+    def _file_exists(self, key_name):
+        from openassessment.fileupload.views_filesystem import get_file_path
+
+        file_path = get_file_path(key_name)
+        file_path = Path(file_path)
+        return file_path.exists()
 
 
 def get_cache():
@@ -79,7 +91,7 @@ def make_upload_url_available(url_key_name, timeout):
         timeout (int): time in seconds before the url expires
     """
     get_cache().set(
-        smart_text(get_upload_cache_key(url_key_name)),
+        smart_str(get_upload_cache_key(url_key_name)),
         1, timeout
     )
 
@@ -93,7 +105,7 @@ def make_download_url_available(url_key_name, timeout):
         timeout (int): time in seconds before the url expires
     """
     get_cache().set(
-        smart_text(get_download_cache_key(url_key_name)),
+        smart_str(get_download_cache_key(url_key_name)),
         1, timeout
     )
 
@@ -102,14 +114,14 @@ def is_upload_url_available(url_key_name):
     """
     Return True if the corresponding upload URL is available.
     """
-    return get_cache().get(smart_text(get_upload_cache_key(url_key_name))) is not None
+    return get_cache().get(smart_str(get_upload_cache_key(url_key_name))) is not None
 
 
 def is_download_url_available(url_key_name):
     """
     Return True if the corresponding download URL is available.
     """
-    return get_cache().get(smart_text(get_download_cache_key(url_key_name))) is not None
+    return get_cache().get(smart_str(get_download_cache_key(url_key_name))) is not None
 
 
 def get_upload_cache_key(url_key_name):

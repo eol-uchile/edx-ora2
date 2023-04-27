@@ -1,3 +1,6 @@
+import BaseView from 'lms/oa_base';
+import SelfView from 'lms/oa_self';
+
 /**
  Tests for OpenAssessment Self view.
  **/
@@ -28,7 +31,7 @@ describe("OpenAssessment.SelfView", function() {
     // View under test
     var view = null;
 
-    beforeEach(function() {
+    beforeEach(function(done) {
         // Load the DOM fixture
         loadFixtures('oa_self_assessment.html');
 
@@ -38,13 +41,23 @@ describe("OpenAssessment.SelfView", function() {
 
         // Create the object under test
         var assessmentElement = $(".step--self-assessment").get(0);
-        var baseView = new OpenAssessment.BaseView(runtime, assessmentElement, server, {});
-        view = new OpenAssessment.SelfView(assessmentElement, server, baseView);
-        view.installHandlers();
+        var baseView = new BaseView(runtime, assessmentElement, server, {
+            "TEXT_RESPONSE_EDITOR": 'text',
+            "AVAILABLE_EDITORS": {
+                'text': {
+                    'js': ['/base/js/src/lms/editors/oa_editor_textarea.js']
+                }
+            }
+        });
+        view = baseView.selfView
+        view.renderResponseViaEditor().then(() => {
+            view.installHandlers();
+            done()
+        });
     });
 
     afterEach(function() {
-        OpenAssessment.clearUnsavedChanges();
+        view.baseView.clearUnsavedChanges();
     });
 
     it("Sends a self assessment to the server", function() {

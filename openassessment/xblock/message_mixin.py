@@ -2,8 +2,6 @@
 Message step in the OpenAssessment XBlock.
 """
 
-from __future__ import absolute_import
-
 import datetime as dt
 
 import pytz
@@ -50,13 +48,19 @@ class MessageMixin:
         # Render the instruction message based on the status of the workflow
         # and the closed status.
         if self.teams_enabled and not self.valid_access_to_team_assessment():
-            path, context = self.render_message_no_team()
-        elif status == "done" or status == "waiting":
+            # If the learner is not on a team and hasn't submitted, warn them
+            if status is None:
+                path, context = self.render_message_no_team()
+            else:
+                path, context = 'openassessmentblock/message/oa_message_unavailable.html', {}
+        elif status in ("done", "waiting"):
             path, context = self.render_message_complete(status_details)
         elif problem_is_closed or active_step_deadline_info.get('is_closed'):
             path, context = self.render_message_closed(active_step_deadline_info)
-        elif status == "self" or status == "peer" or status == "training":
+        elif status in ("self", "peer", "training"):
             path, context = self.render_message_incomplete(status, deadline_info)
+        elif status == "cancelled":
+            path, context = self.render_message_cancelled()
         elif status is None:
             path, context = self.render_message_open(deadline_info)
         else:
@@ -82,8 +86,8 @@ class MessageMixin:
 
         context = {
             status: True,
-            "{}_approaching".format(status): step_info.get('approaching', False),
-            "{}_not_released".format(status): (step_info.get("reason") == "start"),
+            f"{status}_approaching": step_info.get('approaching', False),
+            f"{status}_not_released": (step_info.get("reason") == "start"),
 
             # Uses a static field in the XBlock to determine if the PeerAssessment Block
             # was able to pick up an assessment.
@@ -145,6 +149,21 @@ class MessageMixin:
         }
 
         return 'openassessmentblock/message/oa_message_open.html', context
+
+    def render_message_cancelled(self):
+        """
+        Renders the assessment "cancelled" message state
+
+        Args:
+            status (String): indicates the current step to be completed
+
+        Returns:
+            The path (String) and context (dict) to render the "cancelled" message template
+        """
+        context = {
+            "is_team_assignment": self.is_team_assignment()
+        }
+        return 'openassessmentblock/message/oa_message_cancelled.html', context
 
     def _get_deadline_info(self):
         """

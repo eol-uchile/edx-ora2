@@ -1,10 +1,9 @@
 """ Tests for custom django template tags. """
-from __future__ import absolute_import
+
 
 import unittest
 
 import ddt
-import six
 
 from django.template import Context, Template
 
@@ -14,8 +13,8 @@ class OAExtrasTests(unittest.TestCase):
     """ Tests for custom django template tags oa_extras. """
 
     template = Template(
-        u"{% load oa_extras %}"
-        u"{{ text|link_and_linebreak }}"
+        "{% load oa_extras %}"
+        "{{ text|link_and_linebreak }}"
     )
 
     @ddt.data(
@@ -30,10 +29,9 @@ class OAExtrasTests(unittest.TestCase):
         rendered_template = self.template.render(Context({'text': text}))
         self.assertIn(link_text, rendered_template)
         if text:
-            six.assertRegex(
-                self,
+            self.assertRegex(
                 rendered_template,
-                r'<a.*target="_blank".*>{link_text}</a>'.format(link_text=link_text),
+                fr'<a.*target="_blank".*>{link_text}</a>',
             )
 
     @ddt.data(
@@ -45,5 +43,5 @@ class OAExtrasTests(unittest.TestCase):
     @ddt.unpack
     def test_html_tags(self, text, tag):
         rendered_template = self.template.render(Context({'text': text}))
-        escaped_tag = "&lt;{tag}&gt;".format(tag=tag)
+        escaped_tag = f"&lt;{tag}&gt;"
         self.assertIn(escaped_tag, rendered_template)

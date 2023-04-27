@@ -1,3 +1,4 @@
+import Server from 'oa_server';
 /*
 Tests for OA XBlock server interactions.
 */
@@ -9,7 +10,7 @@ describe("OpenAssessment.Server", function() {
         handlerUrl: function(element, handler) { return "/" + handler; }
     };
 
-    var server = null;
+    let server = null;
 
     var jsonContentType = "application/json; charset=utf-8";
 
@@ -55,6 +56,43 @@ describe("OpenAssessment.Server", function() {
         '</criterion>'+
     '</rubric>';
 
+    var RUBRIC_JSON = {
+        "criteria": [
+            {
+                "label": "𝓒𝓸𝓷𝓬𝓲𝓼𝓮",
+                "prompt": "How concise is it?",
+                "feedback": "disabled",
+                "options": [
+                    {
+                        "label": "ﻉซƈﻉɭɭﻉกՇ",
+                        "points": 3,
+                        "explanation": "Extremely concise",
+                        "name": "",
+                        "order_num": 0
+                    },
+                    {
+                        "label": "Ġööḋ",
+                        "points": 2,
+                        "explanation": "Concise",
+                        "name": "",
+                        "order_num": 1
+                    },
+                    {
+                        "label": "ק๏๏г",
+                        "points": 1,
+                        "explanation": "Wordy",
+                        "name": "",
+                        "order_num": 2
+                    }
+                ],
+                "name": "Ideas",
+                "order_num": 0
+            },
+        ],
+        "feedback_prompt": "Feedback instruction ...",
+        "feedback_default_text": "Feedback default text\n"
+    }
+
     var CRITERIA = [
         'criteria',
         'objects',
@@ -92,7 +130,7 @@ describe("OpenAssessment.Server", function() {
         // Create the server
         // Since the runtime is a stub implementation that ignores the element passed to it,
         // we can set the element parameter to null.
-        server = new OpenAssessment.Server(runtime, null);
+        server = new Server(runtime, null);
     });
 
     it("renders the XBlock as HTML", function() {
@@ -180,8 +218,6 @@ describe("OpenAssessment.Server", function() {
             contentType : jsonContentType
         });
     });
-
-
 
     it("sends a peer-assessment to the XBlock", function() {
         stubAjax(true, {success: true, msg: ''});
@@ -289,6 +325,7 @@ describe("OpenAssessment.Server", function() {
             editorAssessmentsOrder: EDITOR_ASSESSMENTS_ORDER,
             fileUploadType: "image",
             fileTypeWhiteList: ['pdf', 'doc'],
+            multipleFilesEnabled: true,
             latexEnabled: true,
             leaderboardNum: 15
         });
@@ -306,6 +343,7 @@ describe("OpenAssessment.Server", function() {
                 editor_assessments_order: EDITOR_ASSESSMENTS_ORDER,
                 file_upload_type: "image",
                 white_listed_file_types: ['pdf', 'doc'],
+                allow_multiple_files: true,
                 allow_latex: true,
                 leaderboard_show: 15
             }),
@@ -562,7 +600,7 @@ describe("OpenAssessment.Server", function() {
             membership: [{user: {username: 'user1'}}, {user: {username: 'user1'}}, {user: {username: 'user1'}}]
         }
         stubAjax(true, expectedTeamDetail);
-        receivedDetail = null
+        let receivedDetail = null
         server.getTeamDetail('team id').done(function(teamDetail) {receivedDetail = teamDetail})
         expect(receivedDetail).toEqual(expectedTeamDetail)
     });
@@ -595,4 +633,30 @@ describe("OpenAssessment.Server", function() {
         server.getUsername().done(function(username) {receivedUsername = username});
         expect(receivedUsername).toEqual(expectedUsername)
     });
+
+    describe('cloneRubric', () => {
+        it('extracts rubric data from a successful request', () => {
+            let returnedData,
+                expectedData = RUBRIC_JSON;
+            stubAjax(true, { success: true, rubric: RUBRIC_JSON});
+            server.cloneRubric().done((data) => { returnedData = data });
+            expect(returnedData).toEqual(expectedData);
+        });
+
+        it('returns error messages for known failures', () => {
+            let returnedData,
+                errorMsg = 'Danger, Will Robinson!';
+            stubAjax(true, { success: false, msg: errorMsg});
+            server.cloneRubric().fail((data) => { returnedData = data });
+            expect(returnedData).toEqual(errorMsg);
+        });
+
+        it('returns a boilerplate message on other failures', () => {
+            stubAjax(false, null);
+            let returnedMessage = "";
+            server.cloneRubric().fail((msg) => { returnedMessage = msg });
+    
+            expect(returnedMessage).toContain('Failed to clone rubric')
+        })
+    })
 });

@@ -1,7 +1,7 @@
 """
 Models for managing staff assessments.
 """
-from __future__ import absolute_import
+
 
 from datetime import timedelta
 import logging
@@ -30,15 +30,15 @@ class StaffWorkflow(models.Model):
     # Amount of time before a lease on a submission expires
     TIME_LIMIT = timedelta(hours=8)
 
-    scorer_id = models.CharField(max_length=40, db_index=True)
+    scorer_id = models.CharField(max_length=40, db_index=True, blank=True)
     course_id = models.CharField(max_length=255, db_index=True)
     item_id = models.CharField(max_length=128, db_index=True)
     submission_uuid = models.CharField(max_length=128, db_index=True, unique=True)
     created_at = models.DateTimeField(default=now, db_index=True)
-    grading_completed_at = models.DateTimeField(null=True, db_index=True)
-    grading_started_at = models.DateTimeField(null=True, db_index=True)
-    cancelled_at = models.DateTimeField(null=True, db_index=True)
-    assessment = models.CharField(max_length=128, db_index=True, null=True)
+    grading_completed_at = models.DateTimeField(null=True, db_index=True, blank=True)
+    grading_started_at = models.DateTimeField(null=True, db_index=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, db_index=True, blank=True)
+    assessment = models.CharField(max_length=128, db_index=True, null=True, blank=True)
 
     class Meta:
         ordering = ["created_at", "id"]
@@ -141,12 +141,64 @@ class StaffWorkflow(models.Model):
             workflow.grading_started_at = now()
             workflow.save()
             return workflow.identifying_uuid
-        except DatabaseError:
+        except DatabaseError as ex:
             error_message = (
-                u"An internal error occurred while retrieving a submission for staff grading"
+                "An internal error occurred while retrieving a submission for staff grading"
             )
             logger.exception(error_message)
-            raise StaffAssessmentInternalError(error_message)
+            raise StaffAssessmentInternalError(error_message) from ex
+
+    @classmethod
+    def bulk_retrieve_workflow_status(cls, course_id, item_id, submission_uuids):
+        """
+        Retrieves a dictionary with the requested submission UUIDs statuses.
+
+        Args:
+            course_id (str): The course that this problem belongs to
+            item_ids (list of strings): The student_item (problem) that we want to know statistics about.
+
+        Returns:
+            dict: a dictionary with the submission uuids as keys and their statuses as values.
+                  Example:
+                  {
+                      "uuid_1": "submitted",
+                      "uuid_2": "not_submitted
+                  }
+        """
+        # Retrieve queryed submissions
+        steps = cls.objects.filter(
+            course_id=course_id,
+            item_id=item_id,
+            submission_uuid__in=submission_uuids,
+        )
+
+        # Parse them to a dict readable format
+        assessments_list = {}
+        for assessment in steps:
+            status = None
+            if assessment.grading_completed_at:
+                status = 'submitted'
+            else:
+                status = 'not_submitted'
+
+            assessments_list[assessment.submission_uuid] = status
+
+        return assessments_list
+
+    @classmethod
+    def get_staff_workflows_for_course(cls, course_id):
+        """
+        Retrieve all staff workflows for a certain course
+        """
+        return cls.objects.filter(course_id=course_id)
+
+    @classmethod
+    def get_staff_workflow(cls, course_id, item_id, submission_uuid):
+        return cls.objects.get(
+            course_id=course_id,
+            item_id=item_id,
+            submission_uuid=submission_uuid
+        )
 
     def close_active_assessment(self, assessment, scorer_id):
         """
@@ -171,3 +223,11 @@ class TeamStaffWorkflow(StaffWorkflow):
         (submission_uuid for StaffWorkflow, team_submission_uuid for TeamStaffWorkflow)
         """
         return self.team_submission_uuid
+
+    @classmethod
+    def get_team_staff_workflow(cls, course_id, item_id, team_submission_uuid):
+        return cls.objects.get(
+            course_id=course_id,
+            item_id=item_id,
+            team_submission_uuid=team_submission_uuid
+        )

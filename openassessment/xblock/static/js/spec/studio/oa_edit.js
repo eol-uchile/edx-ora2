@@ -1,3 +1,6 @@
+/* eslint-disable */
+import { StudioView } from 'studio/oa_edit';
+
 /**
 Tests for OA XBlock editing.
 **/
@@ -45,11 +48,13 @@ describe("OpenAssessment.StudioView", function() {
     var EXPECTED_SERVER_DATA = {
         title: "The most important of all questions.",
         prompts: [{"description": "How much do you like waffles?"}, {description : 'How much do you like waffles 2?'}],
-        feedbackPrompt: "",
+        feedbackPrompt: "Feedback default prompt",
+        feedback_default_text: "Feedback default text",
         submissionStart: "2014-01-02T12:15",
         submissionDue: "2014-10-01T04:53",
         fileUploadType: null,
         leaderboardNum: 12,
+        showRubricDuringResponse: false,
         criteria: [
             {
                 order_num: 0,
@@ -105,7 +110,8 @@ describe("OpenAssessment.StudioView", function() {
                 start: "2014-01-02T00:00",
                 due: "2014-01-03T00:00",
                 must_grade: 5,
-                must_be_graded_by: 3
+                must_be_graded_by: 3,
+                enable_flexible_grading: false
             },
             {
                 name: "self-assessment",
@@ -137,7 +143,7 @@ describe("OpenAssessment.StudioView", function() {
 
         // Create the object under test
         var el = $('#openassessment-editor').get(0);
-        view = new OpenAssessment.StudioView(runtime, el, server, data);
+        view = new StudioView(runtime, el, server, data);
     });
 
     it("sends the editor context to the server", function() {
@@ -152,10 +158,12 @@ describe("OpenAssessment.StudioView", function() {
         expect(server.receivedData.title).toEqual(EXPECTED_SERVER_DATA.title);
         expect(server.receivedData.prompts).toEqual(EXPECTED_SERVER_DATA.prompts);
         expect(server.receivedData.feedbackPrompt).toEqual(EXPECTED_SERVER_DATA.feedbackPrompt);
+        expect(server.receivedData.feedback_default_text).toEqual(EXPECTED_SERVER_DATA.feedback_default_text);
         expect(server.receivedData.submissionStart).toEqual(EXPECTED_SERVER_DATA.submissionStart);
         expect(server.receivedData.submissionDue).toEqual(EXPECTED_SERVER_DATA.submissionDue);
         expect(server.receivedData.fileUploadType).toEqual(EXPECTED_SERVER_DATA.fileUploadType);
         expect(server.receivedData.leaderboardNum).toEqual(EXPECTED_SERVER_DATA.leaderboardNum);
+        expect(server.receivedData.showRubricDuringResponse).toEqual(EXPECTED_SERVER_DATA.showRubricDuringResponse)
 
         // Criteria
         for (var criterion_idx = 0; criterion_idx < EXPECTED_SERVER_DATA.criteria.length; criterion_idx++) {
@@ -217,7 +225,7 @@ describe("OpenAssessment.StudioView", function() {
         expect(view.alert.isVisible()).toBe(false);
 
         // Introduce a validation error (date field does format invalid)
-        view.settingsView.submissionStart("Not a valid date!", "00:00");
+        view.scheduleView.submissionStart("Not a valid date!", "00:00");
 
         // Try to save the view
         view.save();
@@ -233,7 +241,7 @@ describe("OpenAssessment.StudioView", function() {
         );
 
         // Fix the error and try to save again
-        view.settingsView.submissionStart("2014-04-01", "00:00");
+        view.scheduleView.submissionStart("2014-04-01", "00:00");
         view.save();
 
         // Expect that the validation errors were cleared
@@ -241,5 +249,63 @@ describe("OpenAssessment.StudioView", function() {
         expect(view.validationErrors()).toEqual([]);
         expect(view.alert.isVisible()).toBe(false);
         expect(server.receivedData).not.toBe(null);
+    });
+
+    it("marks invalid tabs as invalid", function() {
+        // Initially, tabs should be valid
+        expect(view.alert.isVisible()).toBe(false);
+
+        const views = [view.promptsView, view.rubricView, view.scheduleView, view.assessmentsStepsView, view.settingsView];
+        views.forEach((subView) => {
+            // Introduce validation errors for first save, clear for second save
+            spyOn(subView, 'validate').and.returnValues(false, true);
+        });
+
+        // Try to save the view
+        view.save();
+
+        // Since all views throw errors, expect the tabs to be marked as invalid
+        $(".oa_editor_tab", view.element).each(function(){
+            expect($(this).find('.validation-warning').is(":visible")).toBe(true);
+        });
+
+        // Magically fix errors (in spy) and save again
+        view.save();
+
+        // Expect that the validation errors were cleared
+        $(".oa_editor_tab", view.element).each(function(){
+            expect($(this).find('.validation-warning').is(":visible")).toBe(false);
+        });
+    });
+
+    it("shows invalid tabs in the validation banner", function() {
+        // Given some tabs with validation errors (rubric, and assessmentSteps)
+        const invalidViews = [ view.rubricView, view.assessmentsStepsView];
+        const invalidViewNames = ['Rubric', 'Assessment steps'];
+
+        const validViews = [view.promptsView, view.scheduleView, view.settingsView];
+        const validViewNames = ['Prompt', 'Schedule', 'Settings'];
+
+        invalidViews.forEach((invalidView) => {
+            spyOn(invalidView, 'validate').and.returnValue(false);
+        });
+        validViews.forEach((validView) => {
+            spyOn(validView, 'validate').and.returnValue(true);
+        });
+
+        // When I try to save the view
+        view.save();
+
+        const alertMessage = $('#openassessment_validation_alert .openassessment_alert_message');
+
+        // Invalid tabs are listed in the validation alert message
+        invalidViewNames.forEach((viewName) => {
+            expect(alertMessage.text()).toContain(viewName)
+        });
+
+        // Valid tabs are *not* listed
+        validViewNames.forEach((viewName) => {
+            expect(alertMessage.text()).not.toContain(viewName)
+        });
     });
 });
