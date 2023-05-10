@@ -193,6 +193,59 @@ class SubmissionMixin:
         # error cases fall through to here
         return status, status_tag, status_text
 
+    @XBlock.json_handler
+    def upload_audio(self, data, suffix=''):  # pylint: disable=unused-argument
+        logger.info('upload_audio ora2')
+        logger.info(data)
+        import urllib
+        if data.get("audios_url", '') == "":
+            return {'success': False, 'msg': self._(u"Missing audio url.")}
+        audio_url = data.get("audios_url")
+        with urllib.request.urlopen(audio_url) as response:
+            audio_file = response.read()
+            file_data = [{
+                'description': '',
+                'name': 'audio',
+                'size': audio_file.length,
+            }]
+            logger.info(file_data)
+            try:
+                self.file_manager.append_uploads(*file_data)
+                # Emit analytics event...
+                self.runtime.publish(
+                    self,
+                    "openassessmentblock.upload_audio",
+                    {"saved_response": self.saved_files_descriptions}
+                )
+            except FileUploadError as exc:
+                logger.exception(u"FileUploadError: file description for data {data} failed with error {error}".format(
+                    data=data,
+                    error=exc
+                ))
+                return {'success': False, 'msg': self._(u"Files metadata could not be saved.")}
+       
+            file_num = 99
+            _, file_ext = os.path.splitext(file_data['name'])
+            file_ext = file_ext.strip('.') if file_ext else None
+            content_type = 'audio/ogg'
+            # Attempt to upload
+            try:
+                key = self._get_student_item_key(file_num)
+                url = file_upload_api.get_upload_url(key, content_type)
+                logger.info(url)
+            except FileUploadError:
+                logger.exception("FileUploadError:Error retrieving upload URL for the data:{data}.".format(data=data))
+                return {'success': False, 'msg': self._("Error retrieving upload URL.")}
+
+            import requests
+            headers = {'Content-type': content_type, 'Slug': file_data['name']}
+            try:
+                r = requests.put(url, data=audio_file, headers=headers)
+            except Exception as e:
+                logger.exception("FileUploadError: Error to upload audio. error: {}".format(str(e)))
+                return {'success': False, 'msg': self._(u"FileUploadError: Error to upload audio.")}
+            return {'success': True}
+
     def _create_submission_response(self, submission):
         """ Wrap submisison info for return to client
 
@@ -468,6 +521,9 @@ class SubmissionMixin:
             return False
 
         elif self.file_upload_type == 'pdf-and-image' and content_type not in self.ALLOWED_FILE_MIME_TYPES:
+            return False
+
+        elif self.file_upload_type == 'audio' and content_type not in self.ALLOWED_FILE_MIME_TYPES:
             return False
 
         elif self.file_upload_type == 'custom' and file_ext.lower() not in self.white_listed_file_types:

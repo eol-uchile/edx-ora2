@@ -81,3 +81,29 @@ body:before {
   white-space: pre;
   font-family: monospace;
   content: "Error: Undefined mixin 'padding'.\A         on line 365 of sass/xb/utilities/_reset.scss, in `padding'\A         from line 365 of sass/xb/utilities/_reset.scss\A         from line 28 of sass/_openassessment.scss"; }
+  .audio-record-container {
+        margin: 0 auto;
+        text-align: center;
+        }
+        
+        .audio-record-display {
+        width: 100%;
+        padding: 25px 0;
+        margin: 25px 0;
+        }
+        
+        .audio-record-controllers {
+        width: 100%;
+        padding: 25px 0;
+        margin: 25px 0;
+        }
+        
+        .audio-record-button {
+        padding: 15px;
+        margin: 10px;
+        font-size: 16px;
+        }
+        
+        .audio-record-button:hover {
+        cursor: pointer;
+        }

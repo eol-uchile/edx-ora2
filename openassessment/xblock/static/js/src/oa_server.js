@@ -38,6 +38,7 @@ export class Server {
     this.getUploadUrl = this.getUploadUrl.bind(this);
     this.removeUploadedFile = this.removeUploadedFile.bind(this);
     this.saveFilesDescriptions = this.saveFilesDescriptions.bind(this);
+    this.setUploadAudio = this.setUploadAudio.bind(this);
     this.getDownloadUrl = this.getDownloadUrl.bind(this);
     this.cancelSubmission = this.cancelSubmission.bind(this);
     this.publishEvent = this.publishEvent.bind(this);
@@ -548,7 +549,22 @@ export class Server {
       });
     }).promise();
   }
-
+  
+  setUploadAudio(data) {
+    const url = this.url('upload_audio');
+    return $.Deferred((defer) => {
+      $.ajax({
+        type: 'POST',
+        url,
+        data: JSON.stringify(data),
+        contentType: jsonContentType,
+      }).done(function (data) {
+        if (data.success) { defer.resolve(); } else { defer.rejectWith(this, [data.msg]); }
+      }).fail(function () {
+        defer.rejectWith(this, [gettext('Server error.')]);
+      });
+    }).promise();
+  }
   /**
    * Sends request to server to save descriptions for each uploaded file.
    */

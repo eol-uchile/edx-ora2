@@ -622,7 +622,6 @@ class OpenAssessmentBlock(MessageMixin,
 
         # minified additional_js should be already included in 'make javascript'
         fragment.add_javascript(load("static/js/openassessment-lms.js"))
-
         js_context_dict = {
             "ALLOWED_IMAGE_MIME_TYPES": self.ALLOWED_IMAGE_MIME_TYPES,
             "ALLOWED_FILE_MIME_TYPES": self.ALLOWED_FILE_MIME_TYPES,

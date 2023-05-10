@@ -75,6 +75,7 @@ export class ResponseView {
           view.dateFactory.apply();
           view.checkSubmissionAbility();
           view.audioRecord.startApp();
+          view.setUploadAudio();
         },
       ).fail(() => {
         view.baseView.showLoadError('response');
@@ -147,6 +148,31 @@ export class ResponseView {
         (eventObject) => {
           eventObject.preventDefault();
           sel.find('#team_text_response_warning').remove();
+        },
+      );
+    }
+
+    setUploadAudio() {
+      const uploadAudiobtn = $('#eol_upload_audio', this.element);
+      uploadAudiobtn.click(
+        (eventObject) => {
+          eventObject.preventDefault();
+          this.baseView.buttonEnabled('#eol_upload_audio', false);
+          const sel = $('.audio-response-display', this.element);
+          const audios = sel.find('audio');
+          const audios_url = [];
+          for (let i = 0; i < audios.length; i++){
+            audios_url.push(audios[i].src);
+          }
+          return this.server.setUploadAudio({ 'audios_url':audios_url }).done(
+            () => {
+              const response_audio = sel.find('#eol_upload_audio_response');
+              response_audio[0].innerHTML = 'Guardado';
+            },
+          ).fail((errMsg) => {
+            const response_audio = sel.find('#eol_upload_audio_response');
+            response_audio[0].innerHTML = 'Error';
+          });
         },
       );
     }
