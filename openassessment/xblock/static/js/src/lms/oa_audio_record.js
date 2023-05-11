@@ -19,12 +19,13 @@ export class AudioRecord {
                 this.mediaRecorder = new MediaRecorder(stream);
 
                 this.mediaRecorder.ondataavailable = (e) => {
-                    this.chunks.push(e.data);
+                    this.chunks = [e.data];
+                    //this.chunks.push(e.data);
                 };
 
                 this.mediaRecorder.onstop = () => {
                     const blob = new Blob(this.chunks, {'type': 'audio/ogg; codecs=opus'});
-                    this.chunks = [];
+                    //this.chunks = [];
                     this.audioURL = window.URL.createObjectURL(blob);
                     document.querySelector('audio').src = this.audioURL;
                     

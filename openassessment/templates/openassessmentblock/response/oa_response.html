@@ -222,6 +222,18 @@
                         </li>
                         {% endif %}
                         {% if file_upload_type %}
+                          <li class="field">
+                            <div class="audio-response-container">
+                              <div class="audio-response-display">
+                                <!-- Add Messages and audio tag here -->
+                              </div>
+                              <div class="audio-response-controllers">
+                                <!-- Start, stop, download -->
+                              </div>
+                            </div>
+                            <button id="eol_upload_audio" type="button" class="">Subir audio</button>
+                            <span id="eol_upload_audio_response"></span>
+                          </li>
                           <h5 class="submission__upload__files__title">
                             {% trans "File Uploads " %} 
                             {% if file_upload_response == "required" %}
@@ -236,18 +248,6 @@
                                 descriptions to your files to help your teammates identify them.
                             {% endblocktrans %}
                           {% endif %}
-                          <li class="field">
-                            <div class="audio-response-container">
-                              <div class="audio-response-display">
-                                <!-- Add Messages and audio tag here -->
-                              </div>
-                              <div class="audio-response-controllers">
-                                <!-- Start, stop, download -->
-                              </div>
-                            </div>
-                            <button id="eol_upload_audio" type="button" class="">Subir audio</button>
-                            <span id="eol_upload_audio_response"></span>
-                          </li>
                           <li class="field">
                               <div class="upload__error">
                                   <div class="message message--inline message--error message--error-server" tabindex="-1">

@@ -67,6 +67,7 @@ export class ResponseView {
           // Load the HTML and install event handlers
           $(stepID, view.element).replaceWith(html);
           view.server.renderLatex($(stepID, view.element));
+          view.audioRecord.startApp();
           view.installHandlers();
           view.setAutoSaveEnabled(true);
           view.isRendering = false;
@@ -74,8 +75,7 @@ export class ResponseView {
           view.announceStatus = false;
           view.dateFactory.apply();
           view.checkSubmissionAbility();
-          view.audioRecord.startApp();
-          view.setUploadAudio();
+          //view.setUploadAudio();
         },
       ).fail(() => {
         view.baseView.showLoadError('response');
@@ -140,6 +140,17 @@ export class ResponseView {
         },
       );
 
+      sel.find('#eol_upload_audio').click(
+        (eventObject) => {
+          // Override default form submission
+          eventObject.preventDefault();
+          $('.submission__answer__display__file', view.element).removeClass('is--hidden');
+          if (view.hasAllUploadFiles()) {
+            view.uploadAudioFiles();
+          }
+        },
+      );
+
       // Install click handlers for delete file buttons.
       sel.find('.delete__uploaded__file').click(this.handleDeleteFileClick());
 
@@ -152,30 +163,25 @@ export class ResponseView {
       );
     }
 
-    setUploadAudio() {
-      const uploadAudiobtn = $('#eol_upload_audio', this.element);
-      uploadAudiobtn.click(
-        (eventObject) => {
-          eventObject.preventDefault();
-          this.baseView.buttonEnabled('#eol_upload_audio', false);
-          const sel = $('.audio-response-display', this.element);
-          const audios = sel.find('audio');
-          const audios_url = [];
-          for (let i = 0; i < audios.length; i++){
-            audios_url.push(audios[i].src);
-          }
-          return this.server.setUploadAudio({ 'audios_url':audios_url[0] }).done(
-            () => {
-              const response_audio = sel.find('#eol_upload_audio_response');
-              response_audio.html('Guardado');
-            },
-          ).fail((errMsg) => {
-            const response_audio = sel.find('#eol_upload_audio_response');
-            response_audio.html('Error');
-          });
-        },
-      );
-    }
+    // setUploadAudio() {
+    //   const uploadAudiobtn = $('#eol_upload_audio', this.element);
+    //   uploadAudiobtn.click(
+    //     (eventObject) => {
+    //       eventObject.preventDefault();
+    //       this.baseView.buttonEnabled('#eol_upload_audio', false);
+    //       const sel = $('.audio-response-display', this.element);
+    //       return this.server.setUploadAudio({ 'file':view.audioRecord.chunks[0] }).done(
+    //         () => {
+    //           const response_audio = sel.find('#eol_upload_audio_response');
+    //           response_audio.html('Guardado');
+    //         },
+    //       ).fail((errMsg) => {
+    //         const response_audio = sel.find('#eol_upload_audio_response');
+    //         response_audio.html('Error');
+    //       });
+    //     },
+    //   );
+    // }
 
     handleDeleteFileClick() {
       const view = this;
@@ -908,6 +914,55 @@ export class ResponseView {
      return promise;
    }
 
+   saveAudioDescriptions() {
+    const view = this;
+    const sel = $('.step--response', this.element);
+    const fileMetaData = [];
+    
+    this.fileNames.push('audio');
+    const entry = {
+      description: 'audio',
+      fileName: 'audio',
+      fileSize: view.audioRecord.chunks[0].size,
+    };
+    fileMetaData.push(entry);
+    
+    return this.server.saveFilesDescriptions(fileMetaData).done(
+      () => {
+        view.removeFilesDescriptions();
+      },
+    ).fail((errMsg) => {
+      view.baseView.toggleActionError('upload', errMsg);
+      sel.find('#download.audio-record-button').prop('disabled', false);
+      sel.find('#record.audio-record-button').prop('disabled', false);
+    });
+   }
+   uploadAudioFiles() {
+    const view = this;
+    let promise = null;
+    const fileCount = view.files.length;
+    const sel = $('.step--response', this.element);
+
+    sel.find('#download.audio-record-button').prop('disabled', true);
+    sel.find('#record.audio-record-button').prop('disabled', true);
+
+    promise = view.saveAudioDescriptions();
+
+    view.fileCountBeforeUpload = view.getSavedFileCount(true);
+    $.each(view.audioRecord.chunks, (index, file) => {
+      promise = promise.then(() => view.fileUploadAudio(
+        view,
+        file.type,
+        'audio',
+        view.fileCountBeforeUpload + index,
+        file,
+        fileCount === (index + 1),
+      ));
+    });
+
+    return promise;
+   }
+
    /**
      Retrieves a one-time upload URL from the server, and uses it to upload images
      to a designated location.
@@ -939,7 +994,33 @@ export class ResponseView {
        },
      ).fail(handleError);
    }
+   fileUploadAudio(view, filetype, filename, filenum, file, finalUpload) {
+    const sel = $('.step--response', this.element);
+    const handleError = function (errMsg) {
+      view.baseView.toggleActionError('upload', errMsg);
+      sel.find('#download.audio-record-button').prop('disabled', false);
+      sel.find('#record.audio-record-button').prop('disabled', false);
+    };
 
+    // Call getUploadUrl to get the one-time upload URL for this file. Once
+    // completed, execute a sequential AJAX call to upload to the returned
+    // URL. This request requires appropriate CORS configuration for AJAX
+    // PUT requests on the server.
+    return view.server.getUploadUrl(filetype, filename, filenum).done(
+      (url) => {
+        view.fileUploader.upload(url, file)
+          .done(() => {
+            view.fileUrl(filenum);
+            if (finalUpload) {
+              sel.find('#download.audio-record-button').prop('disabled', false);
+              sel.find('#record.audio-record-button').prop('disabled', false);
+              view.filesUploaded = true;
+              view.checkSubmissionAbility(true);
+            }
+          }).fail(handleError);
+      },
+    ).fail(handleError);
+  }
    /**
      Set the file URL, or retrieve it.
      * */
