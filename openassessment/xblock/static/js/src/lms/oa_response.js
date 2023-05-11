@@ -164,14 +164,14 @@ export class ResponseView {
           for (let i = 0; i < audios.length; i++){
             audios_url.push(audios[i].src);
           }
-          return this.server.setUploadAudio({ 'audios_url':audios_url }).done(
+          return this.server.setUploadAudio({ 'audios_url':audios_url[0] }).done(
             () => {
               const response_audio = sel.find('#eol_upload_audio_response');
-              response_audio[0].innerHTML = 'Guardado';
+              response_audio.html('Guardado');
             },
           ).fail((errMsg) => {
             const response_audio = sel.find('#eol_upload_audio_response');
-            response_audio[0].innerHTML = 'Error';
+            response_audio.html('Error');
           });
         },
       );

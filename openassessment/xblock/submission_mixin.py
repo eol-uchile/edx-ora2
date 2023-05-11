@@ -202,11 +202,11 @@ class SubmissionMixin:
             return {'success': False, 'msg': self._(u"Missing audio url.")}
         audio_url = data.get("audios_url")
         with urllib.request.urlopen(audio_url) as response:
-            audio_file = response.read()
+            #audio_file = response.read()
             file_data = [{
                 'description': '',
                 'name': 'audio',
-                'size': audio_file.length,
+                'size': response.length,
             }]
             logger.info(file_data)
             try:
@@ -225,7 +225,7 @@ class SubmissionMixin:
                 return {'success': False, 'msg': self._(u"Files metadata could not be saved.")}
        
             file_num = 99
-            _, file_ext = os.path.splitext(file_data['name'])
+            _, file_ext = os.path.splitext(file_data[0]['name'])
             file_ext = file_ext.strip('.') if file_ext else None
             content_type = 'audio/ogg'
             # Attempt to upload
@@ -238,9 +238,9 @@ class SubmissionMixin:
                 return {'success': False, 'msg': self._("Error retrieving upload URL.")}
 
             import requests
-            headers = {'Content-type': content_type, 'Slug': file_data['name']}
+            headers = {'Content-type': content_type, 'Slug': file_data[0]['name']}
             try:
-                r = requests.put(url, data=audio_file, headers=headers)
+                r = requests.put(url, data=response, headers=headers)
             except Exception as e:
                 logger.exception("FileUploadError: Error to upload audio. error: {}".format(str(e)))
                 return {'success': False, 'msg': self._(u"FileUploadError: Error to upload audio.")}
