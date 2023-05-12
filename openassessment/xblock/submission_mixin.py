@@ -47,7 +47,7 @@ class SubmissionMixin:
     ALLOWED_IMAGE_MIME_TYPES = ['image/gif', 'image/jpeg', 'image/pjpeg', 'image/png']  # pragma: no cover
     ALLOWED_IMAGE_EXTENSIONS = ['gif', 'jpg', 'jpgeg', 'jfif', 'pjpeg', 'pjp', 'png']  # pragma: no cover
 
-    ALLOWED_AUDIO_MIME_TYPES = ['audio/ogg', 'application/ogg']
+    ALLOWED_AUDIO_MIME_TYPES = ['audio/ogg', 'application/ogg', 'audio/webm;codecs=opus']
     ALLOWED_AUDIO_EXTENSIONS = ['ogg', 'ogx']
 
     ALLOWED_FILE_MIME_TYPES = ['application/pdf'] + ALLOWED_IMAGE_MIME_TYPES + ALLOWED_AUDIO_MIME_TYPES  # pragma: no cover
@@ -523,7 +523,7 @@ class SubmissionMixin:
         elif self.file_upload_type == 'pdf-and-image' and content_type not in self.ALLOWED_FILE_MIME_TYPES:
             return False
 
-        elif self.file_upload_type == 'audio' and content_type not in self.ALLOWED_FILE_MIME_TYPES:
+        elif self.file_upload_type == 'audio' and content_type not in self.ALLOWED_AUDIO_MIME_TYPES:
             return False
 
         elif self.file_upload_type == 'custom' and file_ext.lower() not in self.white_listed_file_types:

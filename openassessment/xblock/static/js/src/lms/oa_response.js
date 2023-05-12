@@ -145,9 +145,9 @@ export class ResponseView {
           // Override default form submission
           eventObject.preventDefault();
           $('.submission__answer__display__file', view.element).removeClass('is--hidden');
-          if (view.hasAllUploadFiles()) {
-            view.uploadAudioFiles();
-          }
+          //if (view.hasAllUploadFiles()) {
+          view.uploadAudioFiles();
+          //}
         },
       );
 
@@ -940,7 +940,7 @@ export class ResponseView {
    uploadAudioFiles() {
     const view = this;
     let promise = null;
-    const fileCount = view.files.length;
+    const fileCount = 1;
     const sel = $('.step--response', this.element);
 
     sel.find('#download.audio-record-button').prop('disabled', true);
