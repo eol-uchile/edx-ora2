@@ -1062,7 +1062,15 @@ export class ResponseView {
          div2 = $('<div/>');
          div2.html(img);
          div2.appendTo(fileBlock);
-       } else {
+        } else if (view.filesType === 'audio') {
+          audio = $('<audio />');
+          audio.attr('src', url);
+
+          div2 = $('<div/>');
+          div2.html(audio);
+          div2.appendTo(fileBlock);
+        }
+        else{
          const description = view.filesDescriptions[filenum - view.fileCountBeforeUpload];
          const fileName = view.fileNames[filenum - view.fileCountBeforeUpload];
          file = $('<a />', {
