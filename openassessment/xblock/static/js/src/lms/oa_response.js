@@ -232,6 +232,9 @@ export class ResponseView {
         if (($(this).prop('tagName') === 'A') && ($(this).attr('href') !== '')) {
           filesFiledIsNotBlank = true;
         }
+        if (($(this).prop('tagName') === 'audio') && ($(this).attr('src') !== '')) {
+          filesFiledIsNotBlank = true;
+        }
       });
       let readyToSubmit = true;
 
@@ -1010,7 +1013,7 @@ export class ResponseView {
       (url) => {
         view.fileUploader.upload(url, file)
           .done(() => {
-            view.fileUrl(filenum);
+            view.fileUrlAudio(filenum);
             if (finalUpload) {
               sel.find('#download.audio-record-button').prop('disabled', false);
               sel.find('#record.audio-record-button').prop('disabled', false);
@@ -1062,13 +1065,6 @@ export class ResponseView {
          div2 = $('<div/>');
          div2.html(img);
          div2.appendTo(fileBlock);
-        } else if (view.filesType === 'audio') {
-          audio = $('<audio />');
-          audio.attr('src', url);
-
-          div2 = $('<div/>');
-          div2.html(audio);
-          div2.appendTo(fileBlock);
         }
         else{
          const description = view.filesDescriptions[filenum - view.fileCountBeforeUpload];
@@ -1092,6 +1088,39 @@ export class ResponseView {
        return url;
      });
    }
+   fileUrlAudio(filenum) {
+    const view = this;
+    const sel = $('.step--response', this.element);
+    view.server.getDownloadUrl(filenum).done((url) => {
+      const className = `submission__answer__file__block__${filenum}`;
+      let audio = null;
+      let fileBlock = null;
+      const fileBlockExists = !!sel.find(`.${className}`).length;
+      let div2 = null;
+      let button = null;
+
+      if (!fileBlockExists) {
+        fileBlock = $('<div/>');
+        fileBlock.addClass(`submission__answer__file__block ${className}`);
+        fileBlock.appendTo(sel.find('.submission__answer__files').first());
+      }
+      audio = $('<audio />');
+      audio.attr('src', url);
+
+      div2 = $('<div/>');
+      div2.html(audio);
+      div2.appendTo(fileBlock);
+
+      button = $('<button />');
+      button.text('Delete File');
+      button.addClass('delete__uploaded__file');
+      button.attr('filenum', filenum);
+      button.click(view.handleDeleteFileClick());
+      button.appendTo(fileBlock);
+
+      return url;
+    });
+  }
 }
 
 export default ResponseView;
