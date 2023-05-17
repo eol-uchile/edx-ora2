@@ -1106,7 +1106,7 @@ export class ResponseView {
       }
       audio = $('<audio />');
       audio.attr('src', url);
-
+      audio.attr('controls','');
       div2 = $('<div/>');
       div2.html(audio);
       div2.appendTo(fileBlock);
@@ -1117,6 +1117,7 @@ export class ResponseView {
       button.attr('filenum', filenum);
       button.click(view.handleDeleteFileClick());
       button.appendTo(fileBlock);
+      sel.find('.audio-response-display').html('')
 
       return url;
     });
