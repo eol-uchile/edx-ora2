@@ -145,9 +145,13 @@ export class ResponseView {
           // Override default form submission
           eventObject.preventDefault();
           $('.submission__answer__display__file', view.element).removeClass('is--hidden');
-          //if (view.hasAllUploadFiles()) {
-          view.uploadAudioFiles();
-          //}
+          if(view.audioRecord.chunks.length == 0){
+            view.baseView.toggleActionError('upload', 'No se encontraron audios para subir a la plataforma.');
+          }
+          else{
+            view.uploadAudioFiles();
+          }
+          
         },
       );
 
@@ -921,7 +925,6 @@ export class ResponseView {
     const view = this;
     const sel = $('.step--response', this.element);
     const fileMetaData = [];
-    
     this.fileNames.push('audio');
     const entry = {
       description: 'audio',
