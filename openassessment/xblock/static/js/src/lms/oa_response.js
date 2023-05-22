@@ -1117,7 +1117,10 @@ export class ResponseView {
       button.attr('filenum', filenum);
       button.click(view.handleDeleteFileClick());
       button.appendTo(fileBlock);
-      sel.find('.audio-response-display').html('')
+      sel.find('.audio-response-display').html('');
+
+      view.audioRecord.stateIndex = 0;
+      view.audioRecord.application(0);
 
       return url;
     });
